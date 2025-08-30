@@ -21,7 +21,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("help", help_command))
 
-# Run Telegram bot loop
+# Background thread for telegram bot
 loop = asyncio.new_event_loop()
 def run_ptb():
     asyncio.set_event_loop(loop)
@@ -32,15 +32,12 @@ def run_ptb():
 
 Thread(target=run_ptb, daemon=True).start()
 
-@app.route("/", methods=["GET"])
-def home():
-    return "🤖 Bot is alive!"
-
-@app.route(f"/{TOKEN}", methods=["POST"])
+# Webhook endpoint
+@app.route("/webhook", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
     asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
     return "ok", 200
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT)
+    app.run(host="0.0.0.0", port=PORT
