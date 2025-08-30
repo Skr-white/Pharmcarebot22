@@ -1,9 +1,17 @@
 import os
 import asyncio
+import logging
 from threading import Thread
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
+
+# Enable logging
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 TOKEN = "8282174001:AAF1ef9UK0NUdUa3fJTpmU0Q1drPp0IIS0Y"
 PORT = int(os.environ.get("PORT", 8080))
@@ -13,9 +21,11 @@ application = Application.builder().token(TOKEN).build()
 
 # Commands
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("Received /start from user %s", update.effective_user.id)
     await update.message.reply_text("👋 Hello! I am your PharmaCare Bot. How can I help you today?")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("Received /help from user %s", update.effective_user.id)
     await update.message.reply_text("You can use /start to begin or /help to see options.")
 
 application.add_handler(CommandHandler("start", start))
@@ -27,7 +37,7 @@ def run_ptb():
     asyncio.set_event_loop(loop)
     loop.run_until_complete(application.initialize())
     loop.run_until_complete(application.start())
-    print("✅ Telegram Bot Application started.")
+    logger.info("✅ Telegram Bot Application started.")
     loop.run_forever()
 
 Thread(target=run_ptb, daemon=True).start()
@@ -38,8 +48,12 @@ def home():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
+    try:
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
+        logger.info("✅ Update received and processed")
+    except Exception as e:
+        logger.error("❌ Error processing update: %s", str(e))
     return "ok", 200
 
 if __name__ == "__main__":
