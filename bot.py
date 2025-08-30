@@ -20,16 +20,17 @@ app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
 
 # Commands
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("bot")
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("Received /start from user %s", update.effective_user.id)
+    logger.info(f"➡️ /start command from {update.effective_user.id}")
     await update.message.reply_text("👋 Hello! I am your PharmaCare Bot. How can I help you today?")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("Received /help from user %s", update.effective_user.id)
+    logger.info(f"➡️ /help command from {update.effective_user.id}")
     await update.message.reply_text("You can use /start to begin or /help to see options.")
-
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("help", help_command))
 
 # Run Telegram bot loop
 loop = asyncio.new_event_loop()
