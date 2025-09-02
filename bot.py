@@ -43,19 +43,13 @@ def run_ptb():
 
 Thread(target=run_ptb, daemon=True).start()
 
-@app.route("/", methods=["GET"])
-def home():
-    return "🤖 Bot is alive!"
-
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
-        update = Update.de_json(request.get_json(force=True), application.bot)
+        data = request.get_json(force=True)
+        update = Update.de_json(data, application.bot)
         asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
-        logger.info("✅ Update received and processed")
+        logger.info(f"✅ Update received and processed: {data}")
     except Exception as e:
-        logger.error("❌ Error processing update: %s", str(e))
+        logger.error(f"❌ Error processing update: {e}")
     return "ok", 200
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT)
