@@ -34,7 +34,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"➡️ /help from {update.effective_user.id}")
     await update.message.reply_text("You can use /start to begin or /help to see options.")
-from brain import chatbot_response
+from Brain import chatbot_response
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
