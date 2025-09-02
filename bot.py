@@ -1,26 +1,31 @@
 import os
 import asyncio
 import logging
-from threading import Thread
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# Logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("bot")
-
-# Bot token
-TOKEN = os.getenv("BOT_TOKEN", "8282174001:AAF1ef9UK0NUdUa3fJTpmU0Q1drPp0IIS0Y")
-PORT = int(os.environ.get("PORT", 8080))
+# ======================
+# CONFIG
+# ======================
+TOKEN = "8282174001:AAF1ef9UK0NUdUa3fJTpmU0Q1drPp0IIS0Y"
+PORT = int(os.environ.get("PORT", 10000))  # Render expects 10000
 
 # Flask app
 app = Flask(__name__)
 
-# Telegram bot application
+# Telegram app
 application = Application.builder().token(TOKEN).build()
 
-# Handlers
+# ======================
+# LOGGING
+# ======================
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("bot")
+
+# ======================
+# COMMAND HANDLERS
+# ======================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("➡️ /start command triggered")
     await update.message.reply_text("👋 Hello! I am your PharmaCare Bot. How can I help you today?")
@@ -29,24 +34,29 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("➡️ /help command triggered")
     await update.message.reply_text("You can use /start to begin or /help to see options.")
 
+# Register handlers
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("help", help_command))
 
-# Background loop
+# ======================
+# BACKGROUND EVENT LOOP
+# ======================
 loop = asyncio.new_event_loop()
-def run_ptb():
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(application.initialize())
-    loop.run_until_complete(application.start())
-    logger.info("✅ Telegram Bot started")
-    loop.run_forever()
+asyncio.set_event_loop(loop)
 
-Thread(target=run_ptb, daemon=True).start()
+async def start_bot():
+    await application.initialize()
+    await application.start()
+    logger.info("✅ Telegram bot started")
 
-# Flask routes
+loop.create_task(start_bot())
+
+# ======================
+# ROUTES
+# ======================
 @app.route("/", methods=["GET"])
 def home():
-    return "🤖 Bot is alive!"
+    return "🤖 PharmaCare Bot is alive!", 200
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -55,8 +65,25 @@ def webhook():
         asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
         logger.info("✅ Update received and processed")
     except Exception as e:
-        logger.error(f"❌ Error: {e}")
+        logger.error(f"❌ Error processing update: {e}")
     return "ok", 200
 
+# Test route: send yourself a message
+@app.route("/test", methods=["GET"])
+def test():
+    try:
+        chat_id = 6224014992  # 👈 Your Telegram user ID
+        asyncio.run_coroutine_threadsafe(
+            application.bot.send_message(chat_id=chat_id, text="✅ Test message from Render!"),
+            loop
+        )
+        return "Sent test message!", 200
+    except Exception as e:
+        logger.error(f"❌ Test failed: {e}")
+        return "Test failed", 500
+
+# ======================
+# RUN FLASK
+# ======================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT)
