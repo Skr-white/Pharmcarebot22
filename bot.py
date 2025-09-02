@@ -16,22 +16,22 @@ logger = logging.getLogger("bot")
 # === Flask ===
 app = Flask(__name__)
 
-# === Telegram App ===
+# === Telegram App (single global loop) ===
+loop = asyncio.get_event_loop()
 application = Application.builder().token(TOKEN).build()
 
 # Commands
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("➡️ /start command triggered")
+    logger.info(f"➡️ /start from {update.effective_user.id}")
     await update.message.reply_text("👋 Hello! I am your PharmaCare Bot. How can I help you today?")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("➡️ /help command triggered")
+    logger.info(f"➡️ /help from {update.effective_user.id}")
     await update.message.reply_text("You can use /start to begin or /help to see options.")
 
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("help", help_command))
 
-# === Routes ===
 @app.route("/", methods=["GET"])
 def home():
     return "🤖 Bot is alive!"
@@ -40,11 +40,15 @@ def home():
 def webhook():
     try:
         update = Update.de_json(request.get_json(force=True), application.bot)
-        asyncio.get_event_loop().create_task(application.process_update(update))
+        asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
         logger.info("✅ Update received and processed")
     except Exception as e:
         logger.error(f"❌ Error: {e}")
     return "ok", 200
 
 if __name__ == "__main__":
+    # Initialize + start PTB before running Flask
+    loop.run_until_complete(application.initialize())
+    loop.run_until_complete(application.start())
+    logger.info("🚀 Bot started with Flask webhook")
     app.run(host="0.0.0.0", port=PORT)
