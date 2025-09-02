@@ -92,7 +92,6 @@ def chatbot_response(message: str) -> str:
         return random.choice([
             "I’m doing great, thanks for asking! 🤖",
             "I feel fantastic 🌟 What about you?",
-            "Running at full speed ⚡",
             "I’m good and ready to help 👨‍⚕️",
         ])
 
