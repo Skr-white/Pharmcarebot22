@@ -1,3 +1,5 @@
 Flask==2.3.2
 python-telegram-bot==20.3
 gunicorn==21.2.0
+# For API requests in Brain.py
+requests
