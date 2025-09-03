@@ -8,7 +8,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 
 from brain import chatbot_response  # <-- our smart brain
 
-TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"   # replace with your bot token
+TOKEN= "8282174001:AAF1ef9UK0NUdUa3fJTpmU0Q1drPp0IIS0Y"  # replace with your bot token
 PORT = int(os.environ.get("PORT", 10000))
 
 # Logging
