@@ -1,4 +1,3 @@
-# brain.py
 import random
 import requests
 
@@ -92,13 +91,11 @@ def chatbot_response(message: str) -> str:
         return random.choice([
             "I’m doing great, thanks for asking! 🤖",
             "I feel fantastic 🌟 What about you?",
+            "Running at full speed ⚡",
             "I’m good and ready to help 👨‍⚕️",
         ])
 
     # Medicine search with OpenFDA
-    elif "medicine" in msg or "drug" in msg or "tablet" in msg:
-        return "💊 Please tell me the medicine name, e.g., *Paracetamol*."
-
     elif msg.startswith("drug "):
         drug_name = msg.replace("drug ", "").strip()
         return search_openfda(drug_name)
