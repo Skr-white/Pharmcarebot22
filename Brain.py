@@ -68,15 +68,12 @@ def search_openfda(drug: str) -> str:
 def chatbot_response(message: str) -> str:
     msg = message.lower()
 
-    # Greetings
     if any(word in msg for word in ["hello", "hi", "hey", "good morning", "good evening"]):
         return random_greeting()
 
-    # Goodbye
     elif any(word in msg for word in ["bye", "goodbye", "see you", "later", "cya"]):
         return random_goodbye()
 
-    # Gratitude
     elif "thank" in msg:
         return random.choice([
             "🙏 You’re most welcome!",
@@ -86,7 +83,6 @@ def chatbot_response(message: str) -> str:
             "It’s my pleasure 🤖",
         ])
 
-    # Small talk
     elif "how are you" in msg:
         return random.choice([
             "I’m doing great, thanks for asking! 🤖",
@@ -95,21 +91,20 @@ def chatbot_response(message: str) -> str:
             "I’m good and ready to help 👨‍⚕️",
         ])
 
-    # Medicine search with OpenFDA
+    elif "medicine" in msg or "drug" in msg or "tablet" in msg:
+        return "💊 Please tell me the medicine name, e.g., *Paracetamol*."
+
     elif msg.startswith("drug "):
         drug_name = msg.replace("drug ", "").strip()
         return search_openfda(drug_name)
 
-    # Wikipedia search
     elif msg.startswith("wiki "):
         topic = msg.replace("wiki ", "").strip()
         return search_wikipedia(topic)
 
-    # DuckDuckGo search
     elif msg.startswith("search "):
         query = msg.replace("search ", "").strip()
         return search_duckduckgo(query)
 
-    # Fallback
     else:
         return random_fallback()
