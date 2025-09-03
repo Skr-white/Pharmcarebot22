@@ -4,10 +4,10 @@ import logging
 from threading import Thread
 from flask import Flask, request
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from brain import chatbot_response
 
-TOKEN = "8282174001:AAF1ef9UK0NUdUa3fJTpmU0Q1drPp0IIS0Y"
+TOKEN = os.getenv("BOT_TOKEN", "8282174001:AAF1ef9UK0NUdUa3fJTpmU0Q1drPp0IIS0Y")  # 🔑 safer with env var
 PORT = int(os.environ.get("PORT", 10000))
 
 app = Flask(__name__)
@@ -18,10 +18,19 @@ application = Application.builder().token(TOKEN).build()
 
 # Commands
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Hello! I am your PharmaCare Bot. Type 'wiki <topic>', 'drug <name>', or just chat with me!")
+    await update.message.reply_text(
+        "👋 Hello! I am your PharmaCare Bot.\n"
+        "Type `wiki <topic>`, `drug <name>`, or just chat with me!"
+    )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("You can try:\n- `wiki diabetes`\n- `drug ibuprofen`\n- `search healthy diet`\nOr just say hi!")
+    await update.message.reply_text(
+        "You can try:\n"
+        "- `wiki diabetes`\n"
+        "- `drug ibuprofen`\n"
+        "- `search healthy diet`\n"
+        "Or just say hi!"
+    )
 
 # Chat handler using Brain
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -29,7 +38,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply = chatbot_response(user_text)
     await update.message.reply_text(reply)
 
-# Add handlers
+# Handlers
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("help", help_command))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
