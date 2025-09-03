@@ -4,18 +4,16 @@ import logging
 from threading import Thread
 from flask import Flask, request
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, ContextTypes
+from brain import chatbot_response
 
-from brain import chatbot_response  # <-- our smart brain
-
-TOKEN= "8282174001:AAF1ef9UK0NUdUa3fJTpmU0Q1drPp0IIS0Y"  # replace with your bot token
+TOKEN = "8282174001:AAF1ef9UK0NUdUa3fJTpmU0Q1drPp0IIS0Y"
 PORT = int(os.environ.get("PORT", 10000))
 
-# Logging
+app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("bot")
 
-app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
 
 # Commands
