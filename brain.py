@@ -324,7 +324,7 @@ def chatbot_response(msg:str)->str:
     # ---- NEW: Hugging Face chat fallback ----
     hf_reply = hf_chat_fallback(msg)
     if hf_reply:
-        return hf_reply
+        return typing_indicator() + "\n\n" + hf_reply
 
     # final static fallback
     return random_fallback()
