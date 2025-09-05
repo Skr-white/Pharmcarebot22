@@ -5,7 +5,7 @@ from threading import Thread
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
-from brain import chatbot_response
+from brain import chatbot_response, HELP_TEXT   # ✅ import HELP_TEXT from brain.py
 
 TOKEN = os.getenv("BOT_TOKEN", "8282174001:AAF1ef9UK0NUdUa3fJTpmU0Q1drPp0IIS0Y")  # 🔑 safer with env var
 PORT = int(os.environ.get("PORT", 10000))
@@ -20,23 +20,25 @@ application = Application.builder().token(TOKEN).build()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Hello! I am your PharmaCare Bot.\n"
-        "Type `wiki <topic>`, `drug <name>`, or just chat with me!"
+        "Type naturally (e.g. *Tell me about malaria*) or use `/help` to see all commands.",
+        parse_mode="Markdown"
     )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "You can try:\n"
-        "- `wiki diabetes`\n"
-        "- `drug ibuprofen`\n"
-        "- `search healthy diet`\n"
-        "Or just say hi!"
-    )
+    # ✅ uses HELP_TEXT from brain.py (always synced)
+    await update.message.reply_text(HELP_TEXT, parse_mode="Markdown")
 
 # Chat handler using Brain
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
+    
+    # show typing action before processing
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    
+    # process with brain.py
     reply = chatbot_response(user_text)
-    await update.message.reply_text(reply)
+    
+    await update.message.reply_text(reply, parse_mode="Markdown")
 
 # Handlers
 application.add_handler(CommandHandler("start", start))
