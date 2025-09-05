@@ -62,6 +62,15 @@ def _http_get(url, headers=None, timeout=8):
 def _clean(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "")).strip()
 
+# ---- Typing indicator helper ----
+def typing_indicator():
+    """Return a random 'thinking' string to simulate typing."""
+    return random.choice([
+        "🤖 …thinking…",
+        "⌛ please wait…",
+        "💭 …",
+    ])
+
 # ---- Small talk ----
 def random_greeting():
     return random.choice([
