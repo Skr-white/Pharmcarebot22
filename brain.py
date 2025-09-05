@@ -1,4 +1,4 @@
-# brain.py (with caching added)
+# brain.py (with caching + HF chat fallback)
 import os, re, random, requests, threading, time
 from datetime import datetime
 from urllib.parse import quote_plus
@@ -152,6 +152,28 @@ def paraphrase_text(text):
     out = _hf("Vamsi/T5_Paraphrase_Paws", text)
     return f"🔄 {out[0]['generated_text']}" if isinstance(out,list) and out else "⚠️ Paraphrase failed."
 
+# ---- HuggingFace Chat Fallback ----
+def hf_chat_fallback(user_text: str):
+    """Last-resort: try a chat model on Hugging Face."""
+    if not HF_KEY:
+        return None
+    try:
+        url = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
+        payload = {
+            "inputs": f"User: {user_text}\nAssistant:",
+            "parameters": {"max_new_tokens": 150, "temperature": 0.7}
+        }
+        res = requests.post(url, headers=HF_HEADERS, json=payload, timeout=20)
+        if res.ok:
+            out = res.json()
+            if isinstance(out, list) and "generated_text" in out[0]:
+                return out[0]["generated_text"].split("Assistant:")[-1].strip()
+            if isinstance(out, dict) and "generated_text" in out:
+                return out["generated_text"].strip()
+        return None
+    except Exception:
+        return None
+
 # ---- Drug Info ----
 def openfda_drug(drug: str):
     r = _http_get(f"https://api.fda.gov/drug/label.json?search=openfda.brand_name:{quote_plus(drug)}&limit=1")
@@ -290,4 +312,10 @@ def chatbot_response(msg:str)->str:
     if "wiki" in text or "what is" in text or "tell me about" in text: 
         return search_wikipedia(msg.split()[-1])
 
+    # ---- NEW: Hugging Face chat fallback ----
+    hf_reply = hf_chat_fallback(msg)
+    if hf_reply:
+        return hf_reply
+
+    # final static fallback
     return random_fallback()
