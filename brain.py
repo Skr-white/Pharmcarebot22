@@ -207,7 +207,9 @@ if any(word in msg for word in ["bye", "goodbye", "see you", "later"]):
     return random.choice(["👋 Goodbye!", "✨ See you later!", "🚀 Bye-bye!"])
 if "thank" in msg:
     return "🙏 You’re welcome!"
-
+# overview/help
+if msg in ("/start", "help", "menu", "overview"):
+    return get_app_overview()
 # fun
 if msg == "joke" or msg.startswith("tell me a joke"):
     return get_random_joke()
