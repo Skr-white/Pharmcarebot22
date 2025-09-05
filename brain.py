@@ -1,219 +1,273 @@
-"""
-pharmacare_bot_with_api_selector.py
-
-Updated bot core that:
-
-- Integrates many no-auth public APIs (only calls one best API per intent)
-- Uses a small priority/heuristic-based selector so we do NOT query every API
-- Adds a Telegram "typing" (continuous three-dots) indicator context manager
-- Keeps Hugging Face helpers but guarded when HF_KEY absent
-
-HOW TO USE
-----------
-
-Set environment variables (optional where noted):
-
-TELEGRAM_TOKEN    -> your Telegram bot token (optional unless you use typing/send)
-HF_API_KEY        -> Hugging Face API key (optional for HF features)
-OPENWEATHER_KEY   -> OpenWeatherMap API key (optional)
-
-Example integration in webhook/poller:
-
-    from pharmacare_bot_with_api_selector import process_message
-    process_message(chat_id, incoming_text)
-"""
-
-import os
-import requests
-import random
-import threading
-import time
+# brain.py (with caching added)
+import os, re, random, requests, threading, time
 from datetime import datetime
+from urllib.parse import quote_plus
 
-# ========== ENV / KEYS ==========
-
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-HF_KEY = os.getenv("HF_API_KEY")
-OPENWEATHER_KEY = os.getenv("OPENWEATHER_KEY")
-
+# ---- ENV KEYS ----
+HF_KEY  = os.getenv("HF_API_KEY")
+OWM_KEY = os.getenv("WEATHER_API_KEY")
 HF_HEADERS = {"Authorization": f"Bearer {HF_KEY}"} if HF_KEY else {}
-DEFAULT_TIMEOUT = 8
 
+# ---- Cache helper (TTL-based) ----
+class TTLCache:
+    def __init__(self, ttl=300, maxsize=256):
+        self.ttl = ttl
+        self.maxsize = maxsize
+        self.cache = {}
 
-# ========== UTILITIES ==========
+    def get(self, key):
+        val = self.cache.get(key)
+        if not val: return None
+        expire, result = val
+        if time.time() > expire:
+            del self.cache[key]
+            return None
+        return result
 
-def _get(url, params=None, headers=None, timeout=DEFAULT_TIMEOUT):
+    def set(self, key, result):
+        if len(self.cache) >= self.maxsize:
+            self.cache.pop(next(iter(self.cache)))  # drop oldest
+        self.cache[key] = (time.time() + self.ttl, result)
+
+_api_cache = TTLCache(ttl=300, maxsize=300)
+
+# ---- Helpers ----
+def _http_get(url, headers=None, timeout=8):
     try:
-        h = headers or {}
-        if "User-Agent" not in h:
-            h["User-Agent"] = "PharmaCareBot/1.0 (+https://example.com)"
-        r = requests.get(url, params=params, headers=h, timeout=timeout)
-        r.raise_for_status()
-        if r.text and r.headers.get("content-type", "").startswith("application/json"):
-            return r.json()
-        return r.text
-    except Exception:
+        r = requests.get(url, headers=headers or {}, timeout=timeout)
+        return r if r.ok else None
+    except:
         return None
 
+def _clean(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "")).strip()
 
-def get_app_overview():
-    return (
-        "👋 <b>Welcome to PharmaCare Bot!</b>\n\n"
-        "I’m your smart assistant for quick health info, knowledge, fun facts, and more.\n\n"
-        "Here’s what I can do:\n\n"
-        "💊 <b>Drug Info</b>\n"
-        "Ask about any medicine: <code>drug ibuprofen</code>\n\n"
-        "📘 <b>Knowledge & Search</b>\n"
-        "Look up Wikipedia, dictionary, or quick answers.\n"
-        "Example: <code>wiki diabetes</code> or <code>search blockchain</code>\n\n"
-        "🌦️ <b>Weather</b>\n"
-        "Check live weather: <code>weather Lagos</code>\n\n"
-        "📰 <b>News</b>\n"
-        "Get the latest headlines: <code>news</code>\n\n"
-        "🧠 <b>Smart NLP</b>\n"
-        "Summarize text (needs HF key): <code>summarize climate change article</code>\n\n"
-        "🎉 <b>Fun</b>\n"
-        "Get a <code>joke</code> or a <code>fact</code>\n\n"
-        "🕒 <b>Date & Time</b>\n"
-        "Ask me for the current time/date.\n\n"
-        "👤 <b>Name Guess</b>\n"
-        "Predict age, gender, country: <code>guess John</code>\n\n"
-        "🏛️ <b>Universities</b>\n"
-        "Find universities: <code>universities in Canada</code>\n\n"
-        "🏠 <b>Zip Lookup</b>\n"
-        "Get US city/state from zip: <code>zip 90210</code>\n\n"
-        "👥 <b>Random User</b>\n"
-        "Get a random profile: <code>random user</code>\n\n"
-        "🎵 <b>Music</b>\n"
-        "Search for artists: <code>artist Beyonce</code>\n\n"
-        "🍎 <b>Food</b>\n"
-        "Search OpenFoodFacts: <code>food chocolate</code>\n\n"
-        "🌍 <b>Countries</b>\n"
-        "Look up country info: <code>country Japan</code>\n\n"
-        "⚡ <b>How to Use</b>\n"
-        "Type naturally or use these commands. I’ll respond right away 🚀\n\n"
-        "— Your companion, <b>PharmaCare Bot</b> 🤖💚"
-    )
+# ---- Small talk ----
+def random_greeting():
+    return random.choice([
+        "👋 Hey there, how’s your day?",
+        "😃 Hi! Ready to chat?",
+        "🙌 Hello! Always happy to see you.",
+        "🌟 Hey hey! What’s new with you?",
+    ])
 
+def random_goodbye():
+    return random.choice([
+        "👋 Goodbye! Stay safe and hydrated 💧",
+        "✨ Catch you later, take care!",
+        "🚀 Bye-bye, keep pushing forward!",
+    ])
 
-# ========== TYPING INDICATOR (Telegram) ==========
+def random_fallback():
+    return random.choice([
+        "🤔 I didn’t quite get that. Try `/help`.",
+        "🧠 Hmmm, can you rephrase?",
+        "I’m learning every day! Maybe try another way.",
+    ])
 
-class TypingIndicator:
-    """
-    Context manager that sends repeated sendChatAction("typing") calls to Telegram
-    """
+# ---- Fun APIs ----
+def get_joke():
+    key = "joke"
+    cached = _api_cache.get(key)
+    if cached: return cached
+    r = _http_get("https://official-joke-api.appspot.com/random_joke")
+    if r:
+        j = r.json()
+        result = f"🤣 {j['setup']} — {j['punchline']}"
+    else:
+        result = "🤣 No jokes right now."
+    _api_cache.set(key, result)
+    return result
 
-    def __init__(self, token, chat_id, interval=3.0):
-        self.token = token
-        self.chat_id = chat_id
-        self.interval = interval
-        self._stop = threading.Event()
-        self._thread = None
+def get_cat_fact():
+    key = "catfact"
+    cached = _api_cache.get(key)
+    if cached: return cached
+    r = _http_get("https://catfact.ninja/fact")
+    result = f"🐱 {r.json().get('fact')}" if r else "🐱 Cat is sleeping."
+    _api_cache.set(key, result)
+    return result
 
-    def _worker(self):
-        url = f"https://api.telegram.org/bot{self.token}/sendChatAction"
-        payload = {"chat_id": self.chat_id, "action": "typing"}
-        while not self._stop.is_set():
-            try:
-                requests.post(url, json=payload, timeout=5)
-            except Exception:
-                pass
-            self._stop.wait(self.interval)
+def get_activity():
+    key = "activity"
+    cached = _api_cache.get(key)
+    if cached: return cached
+    r = _http_get("https://www.boredapi.com/api/activity")
+    result = f"🎯 {r.json().get('activity')}" if r else "🎯 Can’t think of anything."
+    _api_cache.set(key, result)
+    return result
 
-    def __enter__(self):
-        if not self.token or not self.chat_id:
-            return self
-        self._thread = threading.Thread(target=self._worker, daemon=True)
-        self._thread.start()
-        return self
+def get_dog():
+    r = _http_get("https://dog.ceo/api/breeds/image/random")
+    return r.json().get("message") if r else "🐶 Dog not found."
 
-    def __exit__(self, exc_type, exc, tb):
-        if self._thread is None:
-            return
-        self._stop.set()
-        self._thread.join(timeout=1.0)
+def number_fact(num="random"):
+    key = f"num:{num}"
+    cached = _api_cache.get(key)
+    if cached: return cached
+    r = _http_get(f"http://numbersapi.com/{quote_plus(num)}/trivia?json")
+    result = f"🔢 {r.json().get('text')}" if r else "No number fact."
+    _api_cache.set(key, result)
+    return result
 
-
-# ========== HUGGING FACE HELPERS (guarded) ==========
-
-def hf_query(model: str, text: str):
-    if not HF_KEY:
-        return {"error": "HF key missing"}
+# ---- HuggingFace NLP ----
+def _hf(model, text):
+    if not HF_KEY: return {"error":"HF key missing"}
     try:
-        url = f"https://api-inference.huggingface.co/models/{model}"
-        res = requests.post(url, headers=HF_HEADERS, json={"inputs": text}, timeout=10)
-        res.raise_for_status()
-        return res.json()
+        r = requests.post(f"https://api-inference.huggingface.co/models/{model}",
+                          headers=HF_HEADERS, json={"inputs": text}, timeout=25)
+        return r.json() if r.ok else {"error":r.text}
     except Exception as e:
         return {"error": str(e)}
 
+def summarize_text(text):
+    out = _hf("facebook/bart-large-cnn", text)
+    return f"📝 {out[0]['summary_text']}" if isinstance(out,list) and out else "⚠️ Summarize failed."
 
-def summarize_text(text: str):
-    out = hf_query("facebook/bart-large-cnn", text)
-    if isinstance(out, list) and "summary_text" in out[0]:
-        return f"📝 Summary: {out[0]['summary_text']}"
-    return "⚠️ Summarize failed (HF key missing or model error)."
+def expand_text(text):
+    out = _hf("gpt2", text+" -> explain in detail")
+    return f"📖 {out[0]['generated_text']}" if isinstance(out,list) and out else "⚠️ Expand failed."
 
+def paraphrase_text(text):
+    out = _hf("Vamsi/T5_Paraphrase_Paws", text)
+    return f"🔄 {out[0]['generated_text']}" if isinstance(out,list) and out else "⚠️ Paraphrase failed."
 
-# ========== SMALL TALK & FUN ==========
+# ---- Drug Info ----
+def openfda_drug(drug: str):
+    r = _http_get(f"https://api.fda.gov/drug/label.json?search=openfda.brand_name:{quote_plus(drug)}&limit=1")
+    if r and "results" in r.json():
+        d = r.json()["results"][0]
+        return f"OpenFDA: {d.get('indications_and_usage',['No info'])[0]}"
+    return None
 
-def get_random_joke():
-    url = "https://official-joke-api.appspot.com/random_joke"
-    res = _get(url)
-    if isinstance(res, dict) and res.get("setup"):
-        return f"{res['setup']}\n{res.get('punchline','')}"
-    jokes = [
-        "Why don’t scientists trust atoms? Because they make up everything!",
-        "I told my computer I needed a break, and it said: 'No problem — I'll go to sleep.'",
-    ]
-    return random.choice(jokes)
+def rxnav_drug(drug: str):
+    r = _http_get(f"https://rxnav.nlm.nih.gov/REST/drugs.json?name={quote_plus(drug)}")
+    if r and r.json().get("drugGroup",{}).get("conceptGroup"):
+        return f"RxNav: Found matches for {drug}."
+    return None
 
+def dailymed_drug(drug: str):
+    r = _http_get(f"https://dailymed.nlm.nih.gov/dailymed/services/v2/drugnames.json?drug_name={quote_plus(drug)}")
+    if r and r.json().get("data"):
+        return f"DailyMed: Registered medicine."
+    return None
 
-def get_random_fact():
-    res = _get("https://catfact.ninja/fact")
-    if isinstance(res, dict) and res.get("fact"):
-        return res["fact"]
-    res2 = _get("http://numbersapi.com/random/trivia")
-    if isinstance(res2, str):
-        return res2
-    return "Fun fact: Honey never spoils!"
+def get_drug_info(drug: str):
+    key = f"drug:{drug.lower()}"
+    cached = _api_cache.get(key)
+    if cached: return cached
+    for fn in (lambda: openfda_drug(drug), lambda: rxnav_drug(drug), lambda: dailymed_drug(drug)):
+        r = fn()
+        if r:
+            _api_cache.set(key, r)
+            return r
+    result = f"❌ Sorry, no info found for {drug}."
+    _api_cache.set(key, result)
+    return result
 
+# ---- Wiki/Search ----
+def search_wikipedia(query: str):
+    key = f"wiki:{query.lower()}"
+    cached = _api_cache.get(key)
+    if cached: return cached
+    query=_clean(query)
+    if not query: return "📘 Give me a topic."
+    r=_http_get(f"https://en.wikipedia.org/api/rest_v1/page/summary/{quote_plus(query)}")
+    if r and "extract" in r.json():
+        result = f"📘 {r.json()['extract']}"
+        _api_cache.set(key, result)
+        return result
+    r=_http_get(f"https://api.duckduckgo.com/?q={quote_plus(query)}&format=json")
+    if r and r.json().get("AbstractText"):
+        result = f"🔎 {r.json()['AbstractText']}"
+        _api_cache.set(key, result)
+        return result
+    result = f"❌ No info on {query}"
+    _api_cache.set(key, result)
+    return result
 
-# (I trimmed for space — but the rest of your API wrappers like `guess_name_attributes`, `get_random_user_profile`, `lookup_universities`, `lookup_zip_us`, `jsonplaceholder_post`, `musicbrainz_artist`, `openfoodfacts_search`, `restcountries_lookup`, `get_weather_info`, `get_news`, `get_drug_info`, `search_wikipedia`, and `chatbot_response` remain unchanged — just reformat + indentation fixed.)
-
-
-# ========== TELEGRAM HELPERS ==========
-
-def send_telegram_message(chat_id: int, text: str, parse_mode: str = 'HTML'):
-    if not TELEGRAM_TOKEN:
-        raise RuntimeError('TELEGRAM_TOKEN not set')
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
+# ---- Weather ----
+def openweather_city(city: str):
+    if not OWM_KEY: return None
     try:
-        requests.post(url, json=payload, timeout=6)
-    except Exception:
-        pass
+        r=_http_get(f"http://api.openweathermap.org/data/2.5/weather?q={quote_plus(city)}&appid={OWM_KEY}&units=metric")
+        if r and "main" in r.json():
+            j=r.json(); return f"🌦 {city.title()}: {j['main']['temp']}°C, {j['weather'][0]['description']}"
+    except: return None
+    return None
 
+def open_meteo_city(city: str):
+    g = _http_get(f"https://geocoding-api.open-meteo.com/v1/search?name={quote_plus(city)}&count=1")
+    if not g or not g.json().get('results'): return None
+    loc = g.json()['results'][0]
+    lat, lon = loc['latitude'], loc['longitude']
+    w = _http_get(f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true")
+    if w and w.json().get("current_weather"):
+        cw = w.json()["current_weather"]
+        return f"🌦 {loc['name']}: {cw['temperature']}°C, wind {cw['windspeed']} m/s"
+    return None
 
-def process_message(chat_id: int, text: str):
-    """Show typing, compute response, send to Telegram if token provided."""
-    with TypingIndicator(TELEGRAM_TOKEN, chat_id):
-        resp = chatbot_response(text)
-    try:
-        if TELEGRAM_TOKEN:
-            send_telegram_message(chat_id, resp)
-        else:
+def get_weather_info(city: str):
+    key = f"weather:{city.lower()}"
+    cached = _api_cache.get(key)
+    if cached: return cached
+    for fn in (lambda: openweather_city(city), lambda: open_meteo_city(city)):
+        resp = fn()
+        if resp:
+            _api_cache.set(key, resp)
             return resp
-    except Exception:
-        return resp
+    result = f"❌ Couldn't fetch weather for {city}."
+    _api_cache.set(key, result)
+    return result
 
+# ---- News ----
+def get_news(topic: str = None):
+    key = f"news:{(topic or '').lower()}"
+    cached = _api_cache.get(key)
+    if cached: return cached
+    if topic:
+        r = _http_get(f"https://gnews.io/api/v4/search?q={quote_plus(topic)}&token=demo&lang=en")
+    else:
+        r = _http_get("https://gnews.io/api/v4/top-headlines?token=demo&lang=en")
+    if r and r.json().get("articles"):
+        a = r.json()["articles"][0]
+        result = f"📰 {a.get('title')}\n{a.get('url')}"
+    else:
+        result = "❌ No news."
+    _api_cache.set(key, result)
+    return result
 
-# ========== LOCAL TEST ==========
+# ---- Main Brain ----
+def chatbot_response(msg:str)->str:
+    text=_clean(msg).lower()
+    if not text: return "Say something so I can help 😊"
 
-if __name__ == "__main__":
-    print("Local quick tests:")
-    print("Joke ->", chatbot_response("joke"))
-    print("Fact ->", chatbot_response("fact"))
-    print("Weather Lagos ->", chatbot_response("weather Lagos"))
-    print("Drug aspirin ->", chatbot_response("drug aspirin"))
-    print("Wiki Python ->", chatbot_response("wiki Python (programming language)"))
+    # greetings
+    if any(w in text for w in ["hello","hi","hey"]): return random_greeting()
+    if any(w in text for w in ["bye","goodbye"]): return random_goodbye()
+    if "how are you" in text: return "I’m doing great 🤖 thanks for asking!"
+
+    # fun
+    if "joke" in text: return get_joke()
+    if "cat fact" in text: return get_cat_fact()
+    if "activity" in text or "bored" in text: return get_activity()
+    if "dog" in text: return get_dog()
+    if "number" in text: return number_fact(text.split()[-1])
+
+    # nlp
+    if "summarize" in text: return summarize_text(msg)
+    if "expand" in text: return expand_text(msg)
+    if "paraphrase" in text or "rephrase" in text: return paraphrase_text(msg)
+    if "shorten" in text: return summarize_text(msg)
+
+    # info
+    if "drug" in text or "tablet" in text or "medicine" in text: 
+        return get_drug_info(msg.split()[-1])
+    if "weather" in text or "temperature" in text or "forecast" in text: 
+        return get_weather_info(msg.split()[-1])
+    if "news" in text or "headline" in text: 
+        return get_news()
+    if "wiki" in text or "what is" in text or "tell me about" in text: 
+        return search_wikipedia(msg.split()[-1])
+
+    return random_fallback()
