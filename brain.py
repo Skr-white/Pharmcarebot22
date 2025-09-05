@@ -39,6 +39,45 @@ HF_HEADERS = {"Authorization": f"Bearer {HF_KEY}"} if HF_KEY else {} DEFAULT_TIM
 
 def _get(url, params=None, headers=None, timeout=DEFAULT_TIMEOUT): try: h = headers or {} # Some public APIs dislike empty User-Agent; provide a mild one if "User-Agent" not in h: h["User-Agent"] = "PharmaCareBot/1.0 (+https://example.com)" r = requests.get(url, params=params, headers=h, timeout=timeout) r.raise_for_status() return r.json() if r.text and r.headers.get("content-type", "").startswith("application/json") else r.text except Exception as e: # keep silent on failures, return None return None
 
+
+def get_app_overview():
+    return (
+        "👋 <b>Welcome to PharmaCare Bot!</b>\n\n"
+        "I’m your smart assistant for quick health info, knowledge, fun facts, and more.\n\n"
+        "Here’s what I can do:\n\n"
+        "💊 <b>Drug Info</b>\n"
+        "Ask about any medicine: <code>drug ibuprofen</code>\n\n"
+        "📘 <b>Knowledge & Search</b>\n"
+        "Look up Wikipedia, dictionary, or quick answers.\n"
+        "Example: <code>wiki diabetes</code> or <code>search blockchain</code>\n\n"
+        "🌦️ <b>Weather</b>\n"
+        "Check live weather: <code>weather Lagos</code>\n\n"
+        "📰 <b>News</b>\n"
+        "Get the latest headlines: <code>news</code>\n\n"
+        "🧠 <b>Smart NLP</b>\n"
+        "Summarize text (needs HF key): <code>summarize climate change article</code>\n\n"
+        "🎉 <b>Fun</b>\n"
+        "Get a <code>joke</code> or a <code>fact</code>\n\n"
+        "🕒 <b>Date & Time</b>\n"
+        "Ask me for the current time/date.\n\n"
+        "👤 <b>Name Guess</b>\n"
+        "Predict age, gender, country: <code>guess John</code>\n\n"
+        "🏛️ <b>Universities</b>\n"
+        "Find universities: <code>universities in Canada</code>\n\n"
+        "🏠 <b>Zip Lookup</b>\n"
+        "Get US city/state from zip: <code>zip 90210</code>\n\n"
+        "👥 <b>Random User</b>\n"
+        "Get a random profile: <code>random user</code>\n\n"
+        "🎵 <b>Music</b>\n"
+        "Search for artists: <code>artist Beyonce</code>\n\n"
+        "🍎 <b>Food</b>\n"
+        "Search OpenFoodFacts: <code>food chocolate</code>\n\n"
+        "🌍 <b>Countries</b>\n"
+        "Look up country info: <code>country Japan</code>\n\n"
+        "⚡ <b>How to Use</b>\n"
+        "Type naturally or use these commands. I’ll respond right away 🚀\n\n"
+        "— Your companion, <b>PharmaCare Bot</b> 🤖💚"
+    )
 ========== TYPING INDICATOR (Telegram) ==========
 
 class TypingIndicator: """Context manager that sends repeated sendChatAction("typing") calls to Telegram
