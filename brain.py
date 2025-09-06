@@ -17,6 +17,27 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 from urllib.parse import quote_plus
 
+# -------- HELP / START texts ----------
+HELP_TEXT = (
+    "📜 *PharmaCare Bot — Commands & Examples*\n\n"
+    "💬 Chat naturally: *How are you?* • *Tell me about malaria*\n"
+    "💊 Drugs: `drug paracetamol`, `tell me about ibuprofen`\n"
+    "📘 Knowledge: `wiki diabetes`, `what is hypertension`, `define anemia`\n"
+    "🌦 Weather: `weather Lagos`, `is it raining in Lagos?`\n"
+    "📰 News: `news`, `news technology`\n"
+    "🧠 NLP: `summarize <text>`, `expand <text>`, `shorten <text>`, `paraphrase <text>`\n"
+    "🗺 Map: `map Lagos`, `show me map of Abuja`\n"
+    "🎲 Fun: `joke`, `cat fact`, `activity`\n"
+    "👤 Name Guess: `guess John`\n"
+    "🏛 Universities: `universities in Canada`\n"
+    "🏠 Zip Lookup: `zip 90210`\n"
+    "👥 Random User: `random user`\n"
+    "🎵 Music: `artist Beyonce`\n"
+    "🍎 Food: `food chocolate`\n"
+    "🌍 Countries: `country Japan`\n"
+)
+
+
 # -------- CONFIG / KEYS (set in env) ----------
 HF_KEY = os.getenv("HF_API_KEY")               # optional (Hugging Face)
 HF_MODEL = os.getenv("HF_MODEL", "google/flan-t5-small")
