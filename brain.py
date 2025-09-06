@@ -500,4 +500,4 @@ def chatbot_response(user_text: str) -> str:
     """
     text = _clean(user_text or "")
     if not text:
-        return "Say something so I can hel
+        return "Say something so I can help😊"
