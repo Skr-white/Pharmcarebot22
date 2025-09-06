@@ -7,6 +7,41 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from brain import chatbot_response, HELP_TEXT   # ✅ import HELP_TEXT from brain.py
 
+# Typing indicator helper
+import threading, requests, time
+
+def start_typing(token, chat_id, stop_event):
+    url = f"https://api.telegram.org/bot{token}/sendChatAction"
+    payload = {"chat_id": chat_id, "action": "typing"}
+    while not stop_event.is_set():
+        try:
+            requests.post(url, json=payload, timeout=3)
+        except:
+            pass
+        stop_event.wait(2.5)
+
+# Chat handler using Brain
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_text = update.message.text
+
+    # start typing indicator
+    stop_evt = threading.Event()
+    thr = threading.Thread(
+        target=start_typing,
+        args=(TOKEN, update.message.chat_id, stop_evt),
+        daemon=True
+    )
+    thr.start()
+
+    # get reply
+    reply = chatbot_response(user_text)
+
+    # stop typing indicator
+    stop_evt.set()
+
+    # send reply
+    await update.message.reply_text(reply)
+
 TOKEN = os.getenv("BOT_TOKEN", "8282174001:AAF1ef9UK0NUdUa3fJTpmU0Q1drPp0IIS0Y")  # 🔑 safer with env var
 PORT = int(os.environ.get("PORT", 10000))
 
