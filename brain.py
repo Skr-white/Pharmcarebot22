@@ -512,58 +512,220 @@ def blend_tool_result(user_text: str, tool_name: str, tool_output: str, history:
         return "Sorry — I couldn't get a response from the external service."
     return _shorten(f"I looked this up for you (source: {tool_name}):\n\n{tool_output}", 1200)
 
-
 # ------------------ PUBLIC ENTRYPOINT ------------------
 _chat_history: List[Dict[str,str]] = []
 
 def chatbot_response(user_text: str) -> str:
     """
-    Main function called by bot.py. Returns a single string reply.
+    Main brain entrypoint. Uses:
+      - explicit command handlers (summarize, drug, weather, wiki, etc.)
+      - fast heuristics (heuristic_intent)
+      - planner (planner_intent) when heuristics fail and HF_KEY is available
+      - calls a single best tool, then blends/rewrites using HF (if available)
     """
     text = _clean(user_text or "")
     if not text:
         return "Say something so I can help 😊"
 
-    # 1. Try heuristics
+    low = text.lower().strip()
+
+    # --- START / HELP ---
+    if low in ("/start", "start"):
+        # prefer a short start message, HELP_TEXT is the detailed help block
+        return "👋 Hello! I’m your PharmaCare Bot. Type /help to see what I can do."
+    if low in ("/help", "help", "commands"):
+        # HELP_TEXT should be defined earlier in your file
+        try:
+            return HELP_TEXT
+        except NameError:
+            return "Type `wiki <topic>`, `drug <name>`, `weather <city>`, `summarize <text>` or ask me naturally."
+
+    # --- explicit NLP commands (user asked for these directly) ---
+    m = re.match(r"^(summarize|summarise|shorten)\s+(.+)$", text, flags=re.I)
+    if m:
+        return summarize_text(m.group(2))
+    m = re.match(r"^(expand|explain)\s+(.+)$", text, flags=re.I)
+    if m:
+        return expand_text(m.group(2))
+    m = re.match(r"^(paraphrase|rephrase)\s+(.+)$", text, flags=re.I)
+    if m:
+        return paraphrase_text(m.group(2))
+
+    # --- explicit quick commands (joke, cat fact, activity, random user, number) ---
+    if re.search(r"\bjoke\b", low):
+        return tool_joke() or "🤣 No jokes available."
+    if "cat fact" in low or "catfact" in low:
+        return tool_catfact() or "🐱 No cat facts now."
+    if "activity" in low or "bored" in low:
+        return tool_bored() or "🎯 No activity suggestions."
+    if "random user" in low:
+        return tool_random_user() or "Could not fetch a random user."
+    m = re.match(r"^(?:number|num|fact)\s+(\d+|random)$", low)
+    if m:
+        return tool_numbers(m.group(1))
+
+    # --- explicit domain commands (prefer direct handling) ---
+    # Drug queries: "drug X", "tell me about X", "about X"
+    m = re.search(r"(?:^drug\s+|tell me about\s+|about\s+)(.+)$", text, flags=re.I)
+    if m:
+        drug_name = _clean(m.group(1))
+        # priority: openfda -> rxnav -> dailymed
+        for fn in (tool_openfda, tool_rxnav, tool_dailymed):
+            try:
+                res = fn(drug_name)
+            except Exception:
+                res = None
+            if res:
+                # store & return formatted result
+                _chat_history.append({"user": text, "bot": res})
+                return res
+        # fallback: try planner/heuristic if none
+        # return not-found message
+        return f"❌ Sorry, no drug info found for *{drug_name}*."
+
+    # Wiki / define queries
+    if any(key in low for key in ["what is", "who is", "tell me about", "define", "explain", "wiki "]):
+        # try to extract topic after keywords
+        m = re.search(r"(?:what is|who is|tell me about|define|explain|wiki)\s+(.+)$", text, flags=re.I)
+        topic = _clean(m.group(1)) if m else text
+        # prefer Wikipedia -> DuckDuckGo -> Dictionary
+        for fn in (tool_wikipedia, tool_duckduckgo, tool_dictionary):
+            try:
+                out = fn(topic)
+            except Exception:
+                out = None
+            if out:
+                _chat_history.append({"user": text, "bot": out})
+                return out
+        # nothing found
+        # fallthrough to planner/heuristics below (if you want) or respond not found
+        # but we give a helpful fallback:
+        return f"❌ No results found for *{topic}*."
+
+    # Weather explicit: "weather Lagos", "is it raining in Lagos"
+    m = re.search(r"(?:weather|forecast|temperature|is it raining|is it raining in)\s*(?:in|for)?\s*(.*)", low)
+    if m and m.group(1).strip():
+        city = _clean(m.group(1))
+        # try prioritized weather tools
+        if OWM_KEY:
+            res = tool_openweather(city)
+            if res:
+                _chat_history.append({"user": text, "bot": res})
+                return res
+        res = tool_open_meteo(city) or tool_wttr_in(city)
+        if res:
+            _chat_history.append({"user": text, "bot": res})
+            return res
+        return f"❌ Couldn’t fetch weather for *{city}*."
+
+    # Map explicit
+    m = re.match(r"(?:map|where is|show me map of)\s+(.+)$", low, flags=re.I)
+    if m:
+        place = _clean(m.group(1))
+        map_out = tool_map(place)
+        if map_out:
+            _chat_history.append({"user": text, "bot": map_out})
+            return map_out
+        return f"❌ Map not found for *{place}*."
+
+    # News
+    if "news" in low or "headline" in low:
+        out = tool_reddit_top() or tool_gnews_demo()
+        if out:
+            _chat_history.append({"user": text, "bot": out})
+            return out
+        return "❌ Couldn’t fetch news right now."
+
+    # --- heuristics / planner flow ---
+    # 1) fast heuristic (local)
     intent = heuristic_intent(text)
 
-    # 2. If heuristics didn’t catch it → use Hugging Face planner (if available)
+    # 2) if heuristics didn't return anything, try the HF planner (if available)
     if not intent:
-        intent = planner_intent(text)
+        intent = planner_intent(text)  # planner_intent returns {'action':..., 'tool':..., 'args':...}
 
-    # 3. If action is a tool call
-    if intent.get("action") == "call_tool":
-        tool = intent.get("tool")
+    # handle the returned intent
+    action = intent.get("action") if intent else None
+    if action == "call_tool":
+        tool_name = intent.get("tool")
         args = intent.get("args", "")
-        fn = TOOL_REGISTRY.get(tool)
-        if fn:
+        # try to find a matching function in TOOL_REGISTRY
+        fn = TOOL_REGISTRY.get(tool_name)
+        if not fn:
+            # try fuzzy match: if the requested tool string appears inside any key, pick that
+            lk = tool_name.lower() if tool_name else ""
+            for k in TOOL_REGISTRY:
+                if lk and lk in k.lower():
+                    fn = TOOL_REGISTRY[k]
+                    tool_name = k
+                    break
+        # special-case 'time' (if planner returns time but no tool registered)
+        if not fn and tool_name == "time":
             try:
-                tool_out = fn(args)
-            except Exception as e:
-                tool_out = f"Tool error: {e}"
-            reply = blend_tool_result(text, tool, tool_out or "", _chat_history)
-        else:
-            reply = f"⚠️ Sorry, I don’t have a tool for `{tool}`."
-    else:
-        # 4. Just respond (chat mode)
-        history_text = ""
-        for turn in _chat_history[-6:]:
-            history_text += f"User: {turn.get('user')}\nAssistant: {turn.get('bot')}\n"
+                now = datetime.utcnow().isoformat() + "Z"
+                reply = f"🕒 Current UTC time: {now}"
+                _chat_history.append({"user": text, "bot": reply})
+                return reply
+            except Exception:
+                fn = None
+
+        if not fn:
+            # no tool available — fallback to searching via duckduckgo/wikipedia
+            fallback = tool_duckduckgo(args or text) or tool_wikipedia(args or text)
+            if fallback:
+                _chat_history.append({"user": text, "bot": fallback})
+                return fallback
+            return f"⚠️ I couldn't find a tool for `{tool_name}`."
+
+        # call the tool
+        try:
+            tool_out = fn(args or "")
+        except Exception as e:
+            tool_out = f"Tool call failed: {e}"
+
+        # blend (HF rewrites) or templated reply
+        try:
+            reply = blend_tool_result(text, tool_name, tool_out or "", _chat_history)
+        except Exception:
+            # fallback to simple templated message
+            reply = _shorten((tool_out or "No result returned."), 1200)
+
+        _chat_history.append({"user": text, "bot": reply})
+        return reply
+
+    # else: planner decided to respond directly (no tool)
+    if action == "respond" or (not action):
+        # if HF available — ask HF to generate a natural reply
         if HF_KEY:
+            # keep short history to avoid big prompts
+            history_text = ""
+            for turn in _chat_history[-6:]:
+                history_text += f"User: {turn.get('user')}\nAssistant: {turn.get('bot')}\n"
             prompt = (
-                "You are a friendly, helpful assistant. Keep replies short and clear.\n\n"
+                "You are a helpful, concise assistant. Use the conversation history below to answer the user clearly.\n\n"
                 f"{history_text}\nUser: {text}\nAssistant:"
             )
-            out = hf_query_raw(HF_MODEL, {"inputs": prompt, "parameters": {"max_new_tokens": 220, "temperature": 0.4}})
-            reply = _extract_generated_text(out).strip()
+            try:
+                out = hf_query_raw(HF_MODEL, {"inputs": prompt, "parameters": {"max_new_tokens": 220, "temperature": 0.4}})
+                candidate = _extract_generated_text(out).strip()
+                reply = _shorten(candidate or "Sorry — I couldn't craft a reply.", MAX_REPLY_CHARS)
+            except Exception as e:
+                reply = "⚠️ I couldn't use the language model right now."
         else:
-            # fallback if no HF_KEY
+            # no HF — simple canned replies as fallback
             reply = random.choice([
-                "🤔 I didn’t quite get that. Try asking in another way!",
-                "🧠 I’m still learning — maybe rephrase your question?",
-                "Sorry, I can’t answer that yet."
+                "🤔 I didn’t quite get that. Try `/help` or rephrase your question.",
+                "🧠 I'm still learning — can you try another way of asking?",
+                "Sorry, I can't produce a smart chat reply right now."
             ])
 
-    # 5. Save to history
-    _chat_history.append({"user": text, "bot": reply})
-    return reply
+        _chat_history.append({"user": text, "bot": reply})
+        return reply
+
+    # last-resort fallback
+    fallback = random.choice([
+        "I didn’t understand. Try 'wiki <topic>' or 'drug <name>' or 'weather <city>'.",
+        "Hmm — can you rephrase that?"
+    ])
+    _chat_history.append({"user": text, "bot": fallback})
+    return fallback
