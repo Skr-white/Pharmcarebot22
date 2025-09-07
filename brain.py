@@ -551,11 +551,12 @@ def blend_tool_result(user_text: str, tool_name: str, tool_output: str, history:
     return _shorten(f"I looked this up for you (source: {tool_name}):\n\n{tool_output}", 1200)
 
 # ---------------- Public entrypoint ----------------
-_chat_history: List[Dict[str,str]] = []
+_chat_history: List[Dict[str, str]] = []
 
 def chatbot_response(user_text: str) -> str:
     """
     Main brain entrypoint used by your bot.py.
+    Handles /start, /help, heuristics, planner, and tool calls.
     """
     text = _clean(user_text or "")
     if not text:
@@ -563,9 +564,54 @@ def chatbot_response(user_text: str) -> str:
 
     low = text.lower().strip()
 
-    # start/help
-if low in ("/start", "start"):
-    return START_TEXT
+    # --- Handle /start and /help ---
+    if low in ("/start", "start"):
+        return START_TEXT
+    if low in ("/help", "help"):
+        return HELP_TEXT
 
-if low in ("/help", "help"):
-    return HELP_TEXT
+    # 1. Try heuristics
+    intent = heuristic_intent(text)
+
+    # 2. If heuristics didn’t catch it → use Hugging Face planner
+    if not intent:
+        intent = planner_intent(text)
+
+    # 3. If action is a tool call
+    if intent.get("action") == "call_tool":
+        tool = intent.get("tool")
+        args = intent.get("args", "")
+        fn = TOOL_REGISTRY.get(tool)
+        if fn:
+            try:
+                tool_out = fn(args)
+            except Exception as e:
+                tool_out = f"Tool error: {e}"
+            reply = blend_tool_result(text, tool, tool_out or "", _chat_history)
+        else:
+            reply = f"⚠️ Sorry, I don’t have a tool for `{tool}`."
+    else:
+        # 4. Chat mode
+        history_text = ""
+        for turn in _chat_history[-6:]:
+            history_text += f"User: {turn.get('user')}\nAssistant: {turn.get('bot')}\n"
+        if HF_KEY:
+            prompt = (
+                "You are a friendly, helpful assistant. Keep replies short and clear.\n\n"
+                f"{history_text}\nUser: {text}\nAssistant:"
+            )
+            out = hf_query_raw(
+                HF_MODEL,
+                {"inputs": prompt, "parameters": {"max_new_tokens": 220, "temperature": 0.4}}
+            )
+            reply = _extract_generated_text(out).strip()
+        else:
+            reply = random.choice([
+                "🤔 I didn’t quite get that. Try asking in another way!",
+                "🧠 I’m still learning — maybe rephrase your question?",
+                "Sorry, I can’t answer that yet."
+            ])
+
+    # 5. Save to history
+    _chat_history.append({"user": text, "bot": reply})
+    return reply
