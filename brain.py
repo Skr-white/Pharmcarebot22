@@ -421,68 +421,83 @@ TOOL_REGISTRY = {
 
 # ---------------- Heuristics (fast) ----------------
 def heuristic_intent(user_text: str) -> Optional[Dict[str, Any]]:
+    """
+    Improved heuristic intent detection.
+    Catches natural questions and routes them to the right tool.
+    """
     t = user_text.lower().strip()
     if not t:
         return None
-    # Weather
-    if any(k in t for k in ["weather", "temperature", "forecast", "is it raining"]):
-        m = re.search(r"(?:weather|forecast|temperature|raining|is it raining)(?: (?:in|for))?\s*(.*)", t)
-        city = (m.group(1).strip() if m and m.group(1).strip() else (t.split()[-1] if len(t.split()) > 1 else "London"))
-        # prefer OpenWeather if key else open_meteo
+
+    # --- Weather ---
+    if any(k in t for k in ["weather", "temperature", "forecast", "is it raining", "climate", "hot", "cold"]):
+        m = re.search(r"(?:in|for)\s+([a-z\s]+)", t)
+        city = m.group(1).strip() if m else (t.split()[-1] if len(t.split()) > 1 else "London")
         if OWM_KEY:
-            return {"action": "call_tool", "tool": "openweather", "args": city}
-        return {"action": "call_tool", "tool": "open_meteo", "args": city}
-    # Time
-    if any(k in t for k in ["what time", "current time", "time now", "date now"]):
-        return {"action": "respond", "tool": "time", "args": ""}
-    # News
-    if "news" in t:
+            return {"action": "call_tool", "tool": "weather_openweather", "args": city}
+        return {"action": "call_tool", "tool": "weather_open_meteo", "args": city}
+
+    # --- Time ---
+    if any(k in t for k in ["what time", "current time", "time now", "date now", "clock"]):
+        return {"action": "call_tool", "tool": "time", "args": ""}
+
+    # --- Drug info (side effects, usage, warnings, about, etc.) ---
+    if any(k in t for k in ["drug", "tablet", "pill", "medicine", "side effects", "indication", "treat", "dosage"]):
+        m = re.search(r"(?:drug|tablet|pill|medicine|about|of)\s+(.+)", t)
+        drug = m.group(1).strip() if m else t.split()[-1]
+        return {"action": "call_tool", "tool": "drug_openfda", "args": drug}
+
+    # --- Knowledge / Wiki (what is, who is, tell me about, do you know, explain, define) ---
+    if any(k in t for k in ["what is", "who is", "tell me about", "define", "explain", "meaning of", "do you know"]):
+        m = re.search(r"(?:about|is|define|explain|meaning of|know)\s+(.+)", t)
+        topic = m.group(1).strip() if m else t.split()[-1]
+        return {"action": "call_tool", "tool": "wikipedia", "args": topic}
+
+    # --- News ---
+    if "news" in t or "headline" in t:
         return {"action": "call_tool", "tool": "news_reddit", "args": ""}
-    # Joke / fun
+
+    # --- Fun ---
     if "joke" in t:
         return {"action": "call_tool", "tool": "joke", "args": ""}
     if "cat fact" in t or "catfact" in t:
         return {"action": "call_tool", "tool": "catfact", "args": ""}
     if "activity" in t or "bored" in t:
         return {"action": "call_tool", "tool": "bored", "args": ""}
-    if "dog" in t and any(w in t for w in ["image","photo","picture"]):
-        return {"action": "call_tool", "tool": "dog", "args": ""}
-    # Numbers
+
+    # --- Numbers ---
     m = re.match(r"(?:number|num|fact)\s+(\d+|random)", t)
     if m:
         return {"action": "call_tool", "tool": "numbers", "args": m.group(1)}
-    # Map
-    if t.startswith("map ") or "where is " in t:
+
+    # --- Map / Location ---
+    if "map" in t or "where is" in t or "show me map" in t:
         m = re.search(r"(?:map|where is|show me map of)\s+(.+)", t)
         place = m.group(1).strip() if m else t.split()[-1]
         return {"action": "call_tool", "tool": "map", "args": place}
-    # Drugs
-    if any(k in t for k in ["drug ", "medicine ", "tablet ", "pill ", "paracetamol", "ibuprofen", "amoxicillin", "aspirin", "acetaminophen"]):
-        m = re.search(r"(?:drug|medicine|tell me about|about|what is)\s+(.+)", t)
-        drug = m.group(1).strip() if m else t.split()[-1]
-        return {"action": "call_tool", "tool": "openfda", "args": drug}
-    # Wiki / define / explain
-    if any(k in t for k in ["what is", "who is", "tell me about", "explain", "wiki", "define"]):
-        m = re.search(r"(?:what is|who is|tell me about|explain|define|wiki)\s+(.+)$", t)
-        topic = m.group(1).strip() if m else t
-        return {"action": "call_tool", "tool": "wikipedia", "args": topic}
-    # Universities / zip / country / random user / ip
-    if t.startswith("universities in") or t.startswith("universities "):
-        country = t.split(" in ", 1)[1] if " in " in t else t.replace("universities", "").strip()
+
+    # --- Universities ---
+    if "universities in" in t:
+        country = t.split("universities in", 1)[1].strip()
         return {"action": "call_tool", "tool": "universities", "args": country}
-    if t.startswith("zip ") or t.startswith("zipcode "):
-        z = t.split(" ", 1)[1]
-        return {"action": "call_tool", "tool": "zip", "args": z}
-    if t.startswith("country "):
-        name = t.split(" ",1)[1]
+
+    # --- Country info ---
+    if "country" in t:
+        name = t.replace("country", "").strip()
         return {"action": "call_tool", "tool": "country", "args": name}
+
+    # --- Random user ---
     if "random user" in t:
         return {"action": "call_tool", "tool": "randomuser", "args": ""}
-    if t in ("ip","my ip","what is my ip"):
+
+    # --- IP address ---
+    if t in ("ip", "my ip", "what is my ip"):
         return {"action": "call_tool", "tool": "ip", "args": ""}
-    # fallback to search-like
-    if any(k in t for k in ["search", "look up", "who is", "what is", "tell me about"]):
-        return {"action": "call_tool", "tool": "duckduckgo", "args": t}
+
+    # --- Fallback: search ---
+    if any(k in t for k in ["search", "look up", "find info on"]):
+        return {"action": "call_tool", "tool": "duckduckgo", "args": user_text}
+
     return None
 
 # ---------------- Planner (HF optional) ----------------
