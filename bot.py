@@ -54,8 +54,37 @@ application = Application.builder().token(TOKEN).build()
 # Commands
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Hello! I am your PharmaCare Bot.\n"
-        "Type naturally (e.g. *Tell me about malaria*) or use `/help` to see all commands.",
+        "👋 *Welcome to PharmaCare Bot!* \n\n"
+    "I’m your friendly health & knowledge assistant. You can talk to me naturally —\n"
+    "for example: *Tell me about malaria*, *Is it raining in Lagos?*, or *drug ibuprofen*.\n\n"
+    "Below is a short guide so you know everything I can do and how to ask.\n\n"
+    "— *Quick example commands*\n"
+    "`/help` — show the full command list\n"
+    "`wiki <topic>` — get a short summary from Wikipedia\n"
+    "`drug <name>` — fetch drug info from medical APIs (OpenFDA / RxNav / DailyMed)\n"
+    "`weather <city>` — get current weather for a city\n"
+    "`time` — show current time (UTC/local)\n"
+    "`news` — top headline\n"
+    "`summarize <text>` — short summary (uses Hugging Face if configured)\n"
+    "`expand <text>` — explain or expand text (uses Hugging Face if configured)\n"
+    "`paraphrase <text>` — rephrase text (HF if available)\n"
+    "`joke`, `cat fact`, `activity` — fun quick endpoints\n\n"
+    "— *How I choose an API*\n"
+    "For each question I try a single best API for that type of request (for speed and reliability).\n"
+    "For example:\n"
+    "• Weather → OpenWeather (if API key configured) → Open-Meteo → wttr.in\n"
+    "• Drug info → OpenFDA → RxNav → DailyMed\n"
+    "• Knowledge → Wikipedia → DuckDuckGo → Dictionary API\n\n"
+    "— *Hugging Face (optional)*\n"
+    "If the bot owner has set a Hugging Face API key, I will use it to:\n"
+    "• understand complex English requests,\n"
+    "• decide which tool to call when ambiguous,\n"
+    "• rewrite long tool output into a natural human reply,\n"
+    "• summarize/expand/paraphrase text.\n\n"
+    "If HF is *not* configured, I still try the best web API and give helpful fallbacks.\n\n"
+    "— *Privacy & Tokens*\n"
+    "I never ask for tokens in chat. If an API key isn't working, the owner must set it in the server environment and restart the bot.\n\n"
+    "If you want help or usage examples, type `/help`.\n",
         parse_mode="Markdown"
     )
 
