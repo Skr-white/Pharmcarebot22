@@ -548,4 +548,327 @@ def heuristic_intent(user_text: str) -> Optional[Dict[str, Any]]:
         city = (m.group(1).strip() if m else (t.split()[-1] if len(t.split()) > 0 else "London"))
         # prefer keys when configured
         if OWM_KEY:
-            return {"action": "call_tool_group", "gr
+            return {"action": "call_tool_group", "group": "weather", "args": city}
+        # else use open_meteo/wttr
+        return {"action": "call_tool_group", "group": "weather", "args": city}
+
+    # time
+    if any(k in t for k in ["what time", "current time", "time now", "date now", "clock"]):
+        return {"action": "call_tool", "tool": "time", "args": ""}
+
+    # news
+    if "news" in t or "headline" in t:
+        return {"action": "call_tool_group", "group": "news", "args": ""}
+
+    # joke / fun
+    if "joke" in t:
+        return {"action": "call_tool", "tool": "joke", "args": ""}
+    if "cat fact" in t or "catfact" in t:
+        return {"action": "call_tool", "tool": "catfact", "args": ""}
+    if "activity" in t or "bored" in t:
+        return {"action": "call_tool", "tool": "bored", "args": ""}
+
+    # numbers
+    m = re.match(r"(?:number|num|fact)\s+(\d+|random)", t)
+    if m:
+        return {"action": "call_tool", "tool": "numbers", "args": m.group(1)}
+
+    # map / location
+    if t.startswith("map ") or "where is " in t or t.startswith("show me map"):
+        m = re.search(r"(?:map|where is|show me map of)\s+(.+)", t)
+        place = (m.group(1).strip() if m else t.split()[-1])
+        return {"action": "call_tool", "tool": "map", "args": place}
+
+    # drug/medicine
+    if any(k in t for k in ["drug", "medicine", "tablet", "pill", "side effects", "dosage", "indication", "treat"]):
+        m = re.search(r"(?:drug|about|tell me about|medicine|tablet|pill|what is)\s+(.+)", t)
+        drug = (m.group(1).strip() if m else t.split()[-1])
+        return {"action": "call_tool_group", "group": "drug", "args": drug}
+
+    # wiki / define / explain
+    if any(k in t for k in ["what is", "who is", "tell me about", "define", "explain", "meaning of", "wiki"]):
+        m = re.search(r"(?:what is|who is|tell me about|define|explain|meaning of|wiki)\s+(.+)", t)
+        topic = (m.group(1).strip() if m else t)
+        return {"action": "call_tool_group", "group": "knowledge", "args": topic}
+
+    # universities
+    if t.startswith("universities in ") or t.startswith("universities "):
+        country = t.split(" in ",1)[1] if " in " in t else t.replace("universities", "").strip()
+        return {"action": "call_tool", "tool": "universities", "args": country}
+
+    # zip lookup
+    if t.startswith("zip ") or t.startswith("zipcode "):
+        z = t.split(" ",1)[1]
+        return {"action": "call_tool", "tool": "zip", "args": z}
+
+    # random user, ip, country, food
+    if "random user" in t:
+        return {"action": "call_tool", "tool": "randomuser", "args": ""}
+    if t in ("ip", "my ip", "what is my ip"):
+        return {"action": "call_tool", "tool": "ip", "args": ""}
+    if t.startswith("country "):
+        return {"action": "call_tool", "tool": "country", "args": t.split(" ",1)[1]}
+    if t.startswith("food ") or t.startswith("openfood "):
+        return {"action": "call_tool", "tool": "openfood", "args": t.split(" ",1)[1]}
+
+    # fallback: search
+    if any(k in t for k in ["search", "look up", "find info", "who is", "what is"]):
+        return {"action": "call_tool_group", "group": "knowledge", "args": t}
+
+    return None
+
+# ---------------- Planner (HF) ----------------
+def _extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
+    try:
+        match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+        if not match:
+            return None
+        candidate = match.group(0)
+        candidate = candidate.replace("'", '"')
+        candidate = re.sub(r",\s*(\]|})", r"\1", candidate)
+        return json.loads(candidate)
+    except Exception:
+        return None
+
+def planner_intent(user_text: str) -> Dict[str, Any]:
+    """
+    Ask HF to plan whether to call a tool. Returns a dict with action/tool/args.
+    If HF not configured or planner fails, returns {'action':'respond','args':user_text}.
+    """
+    if not HF_KEY:
+        return {"action": "respond", "args": user_text}
+    prompt = (
+        "You are a short planner. Given the user question, decide whether to call an external tool. "
+        "Return ONLY a JSON object with keys: action (call_tool|call_tool_group|respond), tool (tool key), group (optional), args (string).\n"
+        f"User question: '''{user_text}'''\n\nJSON:"
+    )
+    out = hf_query_raw(HF_MODEL, {"inputs": prompt, "parameters": {"max_new_tokens": 120, "temperature": 0.0}})
+    txt = _extract_generated_text(out)
+    j = _extract_json_from_text(txt)
+    if j and "action" in j:
+        return j
+    return {"action": "respond", "args": user_text}
+
+# ---------------- Blending (HF optional) ----------------
+def blend_tool_result(user_text: str, tool_name: str, tool_output: str, history: Optional[List[Dict[str,str]]] = None) -> str:
+    short_tool_out = _shorten(tool_output or "", 1600)
+    if HF_KEY:
+        history_text = ""
+        if history:
+            for turn in history[-6:]:
+                history_text += f"User: {turn.get('user')}\nAssistant: {turn.get('bot')}\n"
+        prompt = (
+            "You are a concise assistant. Use the tool output to answer the user's question. "
+            "If the tool output is an error, apologize and answer best-effort. Keep reply friendly and short.\n\n"
+            f"Chat history:\n{history_text}\nUser question: {user_text}\nTool called: {tool_name}\nTool output:\n'''{short_tool_out}'''\n\nReply:"
+        )
+        out = hf_query_raw(HF_MODEL, {"inputs": prompt, "parameters": {"max_new_tokens": 220, "temperature": 0.15}})
+        txt = _extract_generated_text(out).strip()
+        if txt:
+            return _shorten(txt, MAX_REPLY_CHARS)
+    # non-HF fallback templated reply
+    if not tool_output:
+        return "Sorry — external service returned no result."
+    return _shorten(f"I looked this up for you (source: {tool_name}):\n\n{tool_output}", 1200)
+
+# ---------------- Public entrypoint ----------------
+_chat_history: List[Dict[str,str]] = []
+
+def chatbot_response(user_text: str) -> str:
+    """
+    Main brain entrypoint used by bot.py.
+    """
+    text = _clean(user_text or "")
+    if not text:
+        return "Say something so I can help 😊"
+
+    low = text.lower().strip()
+
+    # --- start/help ---
+    if low in ("/start", "start"):
+        return START_TEXT
+    if low in ("/help", "help", "commands"):
+        return HELP_TEXT
+
+    # --- explicit NLP commands ---
+    m = re.match(r"^(summarize|summarise|shorten)\s+(.+)$", text, flags=re.I)
+    if m:
+        if not HF_KEY:
+            # if no HF, try a fallback: short wikipedia or duckduckgo snippet
+            topic = m.group(2).strip()
+            snippet = tool_wikipedia(topic) or tool_duckduckgo(topic)
+            return snippet or "⚠️ Summarize requires Hugging Face key (owner must set HF_API_KEY)."
+        return _extract_generated_text(hf_query_raw(HF_MODEL, {"inputs": f"Summarize:\n\n{m.group(2).strip()}", "parameters": {"max_new_tokens": 200}}))
+
+    m = re.match(r"^(expand|explain)\s+(.+)$", text, flags=re.I)
+    if m:
+        if not HF_KEY:
+            return "⚠️ Expansion requires Hugging Face API key (owner must set HF_API_KEY)."
+        return _extract_generated_text(hf_query_raw(HF_MODEL, {"inputs": f"Explain in simple terms:\n\n{m.group(2).strip()}", "parameters": {"max_new_tokens": 300}}))
+
+    m = re.match(r"^(paraphrase|rephrase)\s+(.+)$", text, flags=re.I)
+    if m:
+        if not HF_KEY:
+            return "⚠️ Paraphrase requires Hugging Face API key."
+        return _extract_generated_text(hf_query_raw(HF_MODEL, {"inputs": f"Paraphrase:\n\n{m.group(2).strip()}", "parameters": {"max_new_tokens": 220}}))
+
+    # --- explicit quick commands ---
+    if re.search(r"\bjoke\b", low):
+        return tool_joke() or random.choice(["🤣 No jokes now — try later!", "😅 I'm out of jokes!"])
+    if "cat fact" in low or "catfact" in low:
+        return tool_catfact() or "🐱 No cat facts now."
+    if "activity" in low or "bored" in low:
+        return tool_bored() or "🎯 No activity now."
+    if "random user" in low:
+        return tool_random_user() or "Couldn't fetch a random user."
+    m = re.match(r"^(?:number|num|fact)\s+(\d+|random)$", low)
+    if m:
+        return tool_numbers(m.group(1))
+
+    # --- explicit domain commands ---
+    m = re.match(r"^(?:drug|tell me about)\s+(.+)$", text, flags=re.I)
+    if m:
+        drug_name = _clean(m.group(1))
+        # try prioritized drug tools
+        res = try_tools_sequence("drug", drug_name, [tool_openfda, tool_rxnav, tool_dailymed, tool_rximage])
+        if res:
+            _chat_history.append({"user": text, "bot": res})
+            return res
+        # fallback: try planner or search
+        search = tool_wikipedia(drug_name) or tool_duckduckgo(drug_name)
+        if search:
+            _chat_history.append({"user": text, "bot": search})
+            return search
+        return f"❌ Sorry, no drug info found for *{drug_name}*."
+
+    m = re.match(r"^(?:wiki|define|what is|who is|tell me about|explain)\s+(.+)$", text, flags=re.I)
+    if m:
+        topic = _clean(m.group(1))
+        res = try_tools_sequence("knowledge", topic, [tool_wikipedia, tool_duckduckgo, tool_dictionary])
+        if res:
+            _chat_history.append({"user": text, "bot": res})
+            return res
+        return f"❌ No results for *{topic}*."
+
+    m = re.match(r"^(?:weather|forecast|is it raining|temperature)\s*(?:in|for)?\s*(.*)$", text, flags=re.I)
+    if m and m.group(1).strip():
+        city = _clean(m.group(1))
+        # prioritized weather group
+        res = try_tools_sequence("weather", city, [
+            tool_openweather, tool_weatherapi, tool_weatherbit, tool_open_meteo, tool_wttr_in
+        ])
+        if res:
+            _chat_history.append({"user": text, "bot": res})
+            return res
+        return f"❌ Couldn't fetch weather for *{city}*."
+
+    m = re.match(r"^(?:map|where is|show me map of)\s+(.+)$", text, flags=re.I)
+    if m:
+        place = _clean(m.group(1))
+        res = tool_map(place)
+        if res:
+            _chat_history.append({"user": text, "bot": res})
+            return res
+        return f"❌ Map not found for *{place}*."
+
+    if "news" in low or "headline" in low:
+        res = try_tools_sequence("news", "", [tool_reddit_top, tool_gnews_demo, tool_bbc_rss])
+        if res:
+            _chat_history.append({"user": text, "bot": res})
+            return res
+        return "❌ Couldn't fetch news right now."
+
+    # --- heuristics / planner ---
+    intent = heuristic_intent(text)
+    if not intent:
+        intent = planner_intent(text)
+
+    # handle intent
+    action = intent.get("action")
+    if action == "call_tool":
+        tool_name = intent.get("tool")
+        args = intent.get("args", "")
+        fn = TOOL_REGISTRY.get(tool_name)
+        if not fn:
+            # try fuzzy match
+            lk = (tool_name or "").lower()
+            for k in TOOL_REGISTRY:
+                if lk and lk in k.lower():
+                    fn = TOOL_REGISTRY[k]
+                    tool_name = k
+                    break
+        if tool_name == "time" or (not fn and intent.get("tool") == "time"):
+            now = datetime.utcnow().isoformat() + "Z"
+            reply = f"🕒 Current UTC time: {now}"
+            _chat_history.append({"user": text, "bot": reply})
+            return reply
+        if not fn:
+            # fallback to search
+            fallback = tool_duckduckgo(args or text) or tool_wikipedia(args or text)
+            if fallback:
+                _chat_history.append({"user": text, "bot": fallback})
+                return fallback
+            return f"⚠️ I couldn't find a tool for `{tool_name}`."
+        try:
+            tool_out = fn(args or "")
+        except Exception as e:
+            tool_out = f"Tool call failed: {e}"
+        reply = blend_tool_result(text, tool_name, tool_out or "", _chat_history)
+        _chat_history.append({"user": text, "bot": reply})
+        return reply
+
+    if action == "call_tool_group":
+        group = intent.get("group")
+        arg = intent.get("args", "")
+        if group == "weather":
+            res = try_tools_sequence("weather", arg, [tool_openweather, tool_weatherapi, tool_weatherbit, tool_open_meteo, tool_wttr_in])
+            if res:
+                _chat_history.append({"user": text, "bot": res})
+                return res
+            return f"❌ Couldn't fetch weather for *{arg}*."
+        if group == "drug":
+            res = try_tools_sequence("drug", arg, [tool_openfda, tool_rxnav, tool_dailymed, tool_rximage])
+            if res:
+                _chat_history.append({"user": text, "bot": res})
+                return res
+            return f"❌ No drug info found for *{arg}*."
+        if group == "knowledge":
+            res = try_tools_sequence("knowledge", arg, [tool_wikipedia, tool_duckduckgo, tool_dictionary])
+            if res:
+                _chat_history.append({"user": text, "bot": res})
+                return res
+            return f"❌ No results for *{arg}*."
+        if group == "news":
+            res = try_tools_sequence("news", arg, [tool_reddit_top, lambda q: tool_gnews_demo(arg if arg else None), tool_bbc_rss])
+            if res:
+                _chat_history.append({"user": text, "bot": res})
+                return res
+            return "❌ No news right now."
+
+    # action 'respond' or nothing: try to answer conversationally
+    if HF_KEY:
+        history_text = ""
+        for turn in _chat_history[-6:]:
+            history_text += f"User: {turn.get('user')}\nAssistant: {turn.get('bot')}\n"
+        prompt = (
+            "You are a helpful, concise assistant. Use the conversation history below to answer simply.\n\n"
+            f"{history_text}\nUser: {text}\nAssistant:"
+        )
+        out = hf_query_raw(HF_MODEL, {"inputs": prompt, "parameters": {"max_new_tokens": 220, "temperature": 0.4}})
+        candidate = _extract_generated_text(out).strip()
+        reply = _shorten(candidate or "Sorry — I couldn't craft a reply.", MAX_REPLY_CHARS)
+    else:
+        # non-HF fallback: try search providers for an answer
+        search = tool_duckduckgo(text) or tool_wikipedia(text) or tool_dictionary(text)
+        if search:
+            reply = search
+        else:
+            # final friendly fallback (guarantee some reply)
+            reply = random.choice([
+                "🤔 I didn’t quite get that. Try '/help' or rephrase your question.",
+                "🧠 I'm learning — can you ask in another way?",
+                "🙂 I'm here! Could you be more specific?"
+            ])
+
+    _chat_history.append({"user": text, "bot": reply})
+    return reply
