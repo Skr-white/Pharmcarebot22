@@ -565,5 +565,58 @@ def chatbot_response(user_text: str) -> str:
 
     # start/help
     if low in ("/start", "start"):
-        return "👋 Hello! I’m your PharmaCare Bot. Type /help to see what I can do."
-    
+        return START_TEXT = ( "😊Welcome to PharmaCare Bot!* \n\n"
+    "I’m your friendly health, knowledge, and utility assistant. You can chat with me in plain English, "
+    "and I’ll do my best to understand, fetch info from trusted free APIs, and reply like a real human.\n\n"
+
+    "✨ *How to talk to me*\n"
+    "You don’t need special commands — just ask naturally. For example:\n"
+    "• \"Tell me about malaria\"\n"
+    "• \"Is it raining in Lagos?\"\n"
+    "• \"drug ibuprofen\"\n\n"
+
+    "📜 *Here’s what I can do for you:*\n\n"
+
+    "💊 *Drug Information*\n"
+    "I use medical APIs (OpenFDA, RxNav, DailyMed) to give you indications, usage, and warnings for medicines.\n"
+    "_Example_: `drug paracetamol`, `tell me about ibuprofen`\n\n"
+
+    "📘 *Knowledge & Definitions*\n"
+    "I search Wikipedia, DuckDuckGo, and dictionary APIs to explain terms, people, and concepts.\n"
+    "_Example_: `wiki diabetes`, `define anemia`, `what is hypertension`\n\n"
+
+    "🌦 *Weather & Time*\n"
+    "I can check the weather using OpenWeather (if key is set), Open-Meteo, or wttr.in. "
+    "I can also tell you the current time.\n"
+    "_Example_: `weather Lagos`, `is it raining in Abuja?`, `time`\n\n"
+
+    "📰 *News*\n"
+    "I fetch top headlines from Reddit and GNews.\n"
+    "_Example_: `news`, `news technology`\n\n"
+
+    "🧠 *Smart Text Tools* (powered by Hugging Face if enabled)\n"
+    "I can process text to summarize, expand, or paraphrase it.\n"
+    "_Example_: `summarize The sun is a star...`, `expand What is gravity?`, `paraphrase This is good`\n\n"
+
+    "🗺 *Maps & Location*\n"
+    "I can show static map links and search locations.\n"
+    "_Example_: `map Lagos`, `where is Abuja`, `zip 90210`\n\n"
+
+    "🎲 *Fun & Random*\n"
+    "For fun or quick info I use joke, cat fact, random activity, random user, and number trivia APIs.\n"
+    "_Example_: `joke`, `cat fact`, `activity`, `random user`, `number 7`\n\n"
+
+    "🌍 *Countries & Food*\n"
+    "I can fetch data about countries (capital, population) and look up food items.\n"
+    "_Example_: `country Japan`, `food chocolate`\n\n"
+
+    "⚙️ *How I work*\n"
+    "1. I first check if your request matches one of my special APIs (weather, drugs, wiki, etc.).\n"
+    "2. If not clear, I use Hugging Face AI (if configured) to understand and decide which tool to call.\n"
+    "3. I reply in plain English with friendly answers.\n\n"
+
+    "💡 *Tip*: If I don’t get it right the first time, try rephrasing. You can always type `/help` "
+    "to see the full command list.\n\n"
+
+    "Now go ahead — ask me anything! 🚀"
+)
