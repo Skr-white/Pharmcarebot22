@@ -32,25 +32,9 @@ from shared_state import shared_data, lock
 
 # Example usage
 def chatbot_response(message: str) -> str:
-    response = f"Echo: {message}"  # your actual response logic
-
-    with lock:
-        shared_data["last_user_message"] = message
-        shared_data["last_bot_response"] = response
-
-    return response
-
-from shared_state import update_state, get_state
-
-# Example chatbot function for new brain
-def chatbot_response_new(message: str) -> str:
-    # Different logic can go here
-    response = f"[New Brain] You said: {message}"
-    
-    # Update shared state
+    response = f"Echo: {message}"  # replace with actual logic
     update_state("last_user_message", message)
     update_state("last_bot_response", response)
-    
     return response
 # ---------------- IMPORT/INHERIT CONFIG FROM brain.py ----------------
 brain = None
