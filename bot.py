@@ -6,7 +6,7 @@ from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from brain import chatbot_response, HELP_TEXT   # ✅ import HELP_TEXT from brain.py
-
+from Brain_new import chatbot_response
 # Typing indicator helper
 import threading, requests, time
 
