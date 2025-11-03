@@ -27,7 +27,20 @@ from urllib.parse import quote_plus
 from typing import Any, Dict, Optional, List, Callable  # ✅ Added typing imports
 
 from shared_state import update_state, get_state, shared_data, lock
+from shared_state import update_state, get_state
 
+def chatbot_response(message: str) -> str:
+    response = f"Echo: {message}"
+
+    # Save to shared state
+    update_state("last_user_message", message)
+    update_state("last_bot_response", response)
+
+    # Retrieve previous response
+    last_response = get_state("last_bot_response")
+    print("Last bot response:", last_response)
+
+    return response
 # ---------------- CHATBOT FUNCTION ----------------
 def chatbot_response(message: str) -> str:
     response = f"I got your message: {message}"  # Replace with your actual logic
