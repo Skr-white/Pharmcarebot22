@@ -27,6 +27,7 @@ from telegram import Update, Bot
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import CallbackContext
+from shared_state import shared_data, lock
 
 from shared_state import update_state, get_state
 
