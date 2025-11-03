@@ -24,6 +24,7 @@ import random
 import requests
 from datetime import datetime
 from telegram import Update, Bot
+from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import CallbackContext
 
