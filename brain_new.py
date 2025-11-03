@@ -53,7 +53,7 @@ MAX_REPLY_CHARS = getattr(brain, "MAX_REPLY_CHARS", None) or int(os.getenv("BRAI
 
 # Optional API Keys (DrugBank, Elsevier)
 DRUGBANK_KEY = getattr(brain, "DRUGBANK_KEY", None) or os.getenv("DRUGBANK_KEY")
-ELSEVIER_DI_KEY = getattr(brain, "ELSEVIER_DI_KEY", None) or os.getenv("ELSEVIER_DI_KEY")
+ELSEVIER_DI_KEY = getattr(brain, "831ed530dcd31b028ccc09a4e3712978", None) or os.getenv("ELSEVIER_DI_KEY")
 
 # Telegram token (used in main if running this file directly)
 TELEGRAM_TOKEN = getattr(brain, "TELEGRAM_TOKEN", None) or os.getenv("TELEGRAM_TOKEN")
