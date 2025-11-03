@@ -15,14 +15,17 @@ Behavior:
 """
 
 import os
+import re
 import json
+import math
+import time
+import html
 import random
 import requests
-from datetime import datetime
-from telegram import Update, Bot
-from telegram.constants import ParseMode
-from telegram.ext import CallbackContext
-
+from functools import wraps
+from datetime import datetime, timedelta
+from urllib.parse import quote_plus
+from typing import Any, Dict, Optional  # ✅ Needed for TTLCache
 from shared_state import update_state, get_state
 
 # Example chatbot function
@@ -332,29 +335,32 @@ Type `/help` anytime to see this guide again.
 -----------------------
 ⚙️ Owner notes: set env vars `HF_API_KEY`, `HF_MODEL`, `WEATHER_API_KEY` etc., then restart the bot.
 """
-
-# ---------------- TTL cache ----------------
 class TTLCache:
-    def __init__(self, ttl: int = CACHE_TTL):
+    """
+    Simple in-memory cache with TTL (time-to-live) per key.
+    """
+    def __init__(self, ttl: int = 60):
         self.ttl = ttl
-        self.d: Dict[str, Any] = {}
-
-    def get(self, k: str):
-        v = self.d.get(k)
-        if not v:
-            return None
-        exp, val = v
-        if time.time() > exp:
-            self.d.pop(k, None)
-            return None
-        return val
+        self.d: Dict[str, tuple[float, Any]] = {}
 
     def set(self, k: str, val: Any):
-        if len(self.d) > 2000:
-            self.d.pop(next(iter(self.d)))
         self.d[k] = (time.time() + self.ttl, val)
 
-_cache = TTLCache()
+    def get(self, k: str) -> Optional[Any]:
+        if k in self.d:
+            expiry, val = self.d[k]
+            if expiry > time.time():
+                return val
+            else:
+                del self.d[k]  # remove expired
+        return None
+
+    def delete(self, k: str):
+        if k in self.d:
+            del self.d[k]
+
+    def clear(self):
+        self.d.clear()
 
 # ---------------- HTTP helper ----------------
 def _safe_get(url: str, params: Optional[dict] = None, headers: Optional[dict] = None,
