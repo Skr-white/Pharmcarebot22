@@ -6,6 +6,11 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from brain import chatbot_response, HELP_TEXT
 from brain_new import chatbot_response_new
 from shared_state import get_state
+from shared_state import shared_data, lock
+
+# Example: read last bot response
+with lock:
+    last_response = shared_data["last_bot_response"]
 
 # Example async command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
