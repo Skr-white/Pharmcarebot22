@@ -1,4 +1,3 @@
-# shared_state.py
 import threading
 
 lock = threading.Lock()
