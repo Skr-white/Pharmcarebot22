@@ -27,6 +27,8 @@ from datetime import datetime, timedelta
 from urllib.parse import quote_plus
 from typing import Any, Dict, Optional  # ✅ Needed for TTLCache
 from shared_state import update_state, get_state
+from shared_state import shared_data, lock
+
 
 # Example chatbot function
 def chatbot_response(message: str) -> str:
