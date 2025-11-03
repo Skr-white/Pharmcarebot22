@@ -13,7 +13,6 @@ Behavior:
  - TTL cache to reduce repeated external calls
  - always tries fallbacks: group APIs -> search -> HF response -> friendly fallback
 """
-
 import os
 import re
 import json
@@ -25,26 +24,15 @@ import requests
 from functools import wraps
 from datetime import datetime, timedelta
 from urllib.parse import quote_plus
+from typing import Any, Dict, Optional, List, Callable  # ✅ Added typing imports
 
-# Typing
-from typing import Any, Dict, Optional, Callable
+from shared_state import update_state, get_state, shared_data, lock
 
-# Shared state
-from shared_state import shared_data, lock, update_state, get_state
-
-# ---------------- Example chatbot function ----------------
+# ---------------- CHATBOT FUNCTION ----------------
 def chatbot_response(message: str) -> str:
-    """
-    Example chatbot response logic.
-    Updates shared state with last user message and last bot response.
-    """
     response = f"I got your message: {message}"  # Replace with your actual logic
-    
-    # Update shared state safely
-    with lock:
-        update_state("last_user_message", message)
-        update_state("last_bot_response", response)
-    
+    update_state("last_user_message", message)
+    update_state("last_bot_response", response)
     return response
 HELP_TEXT = """
 📜 *PharmaCare Bot — Commands & Examples*
@@ -168,7 +156,15 @@ Type `/help` anytime to see this guide again.
 -----------------------
 ⚙️ Owner notes: set env vars `HF_API_KEY`, `HF_MODEL`, `WEATHER_API_KEY` etc., then restart the bot.
 """
+# ---------------- TOOL REGISTRY EXAMPLE ----------------
+TOOL_REGISTRY: Dict[str, Callable[[str], Optional[str]]] = {}
 
+def try_tools_sequence(key: str, arg: str, candidates: List[Callable[[str], Optional[str]]]) -> Optional[str]:
+    for tool in candidates:
+        result = tool(arg)
+        if result is not None:
+            return result
+    return None
 # ---------------- CONFIG & KEYS ----------------
 HF_KEY = os.getenv("HF_API_KEY") or os.getenv("HUGGINGFACE_API_KEY")
 HF_MODEL = os.getenv("HF_MODEL", "google/flan-t5-small")
@@ -343,32 +339,24 @@ Type `/help` anytime to see this guide again.
 -----------------------
 ⚙️ Owner notes: set env vars `HF_API_KEY`, `HF_MODEL`, `WEATHER_API_KEY` etc., then restart the bot.
 """
+---------------- TTL CACHE EXAMPLE ----------------
 class TTLCache:
-    """
-    Simple in-memory cache with TTL (time-to-live) per key.
-    """
     def __init__(self, ttl: int = 60):
         self.ttl = ttl
-        self.d: Dict[str, tuple[float, Any]] = {}
+        self.d: Dict[str, Any] = {}
 
     def set(self, k: str, val: Any):
         self.d[k] = (time.time() + self.ttl, val)
 
     def get(self, k: str) -> Optional[Any]:
-        if k in self.d:
-            expiry, val = self.d[k]
-            if expiry > time.time():
-                return val
-            else:
-                del self.d[k]  # remove expired
-        return None
-
-    def delete(self, k: str):
-        if k in self.d:
+        item = self.d.get(k)
+        if not item:
+            return None
+        expire, val = item
+        if time.time() > expire:
             del self.d[k]
-
-    def clear(self):
-        self.d.clear()
+            return None
+        return val
 
 # ---------------- HTTP helper ----------------
 def _safe_get(url: str, params: Optional[dict] = None, headers: Optional[dict] = None,
