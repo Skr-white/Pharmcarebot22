@@ -15,14 +15,148 @@ Behavior:
 """
 
 import os
-import re
-import time
 import json
 import random
 import requests
-from typing import Optional, Dict, Any, List, Callable
 from datetime import datetime
-from urllib.parse import quote_plus
+from telegram import Update, Bot
+from telegram.constants import ParseMode
+from telegram.ext import CallbackContext
+
+from shared_state import update_state, get_state
+
+# Example chatbot function
+def chatbot_response(message: str) -> str:
+    # Example response logic
+    response = f"I got your message: {message}"
+    
+    # Update shared state
+    update_state("last_user_message", message)
+    update_state("last_bot_response", response)
+    
+    return response
+HELP_TEXT = """
+📜 *PharmaCare Bot — Commands & Examples*
+
+💬 Chat naturally. Examples:
+- "How are you?"
+- "Tell me about malaria"
+
+💊 Drug info: `drug <name>` — OpenFDA, RxNav, DailyMed.
+📘 Knowledge: `wiki <topic>`, `define <word>` — Wikipedia, DuckDuckGo, Dictionary.
+🌦 Weather: `weather <city>` — multiple providers.
+📰 News: `news` — top headline.
+🧠 NLP: `summarize <text>`, `expand <text>`, `paraphrase <text>` (needs HF key).
+🎲 Fun: `joke`, `cat fact`, `activity`, `random user`, `number <n>`.
+🗺 Map: `map <place>` — static OpenStreetMap link.
+
+I can answer pharmacy-related questions, help with calculations, explain ingredients, and guide you through pharmaceutical methods.
+
+-----------------------
+🧮 **Dosage & Calculation Help**
+You can ask questions like:
+- "How do I calculate a child’s dose for paracetamol 15mg/kg if the child weighs 20kg?"
+- "What’s the infusion rate for 500mg in 100mL over 30 minutes?"
+- "How many tablets of 250mg do I need to make 1g?"
+- "What’s the formula for dilution when making 5mg/mL from 20mg/mL?"
+- "Explain the method for reconstituting a 1g vial with 10mL water."
+
+I’ll show the step-by-step formula and the correct method.
+
+-----------------------
+⚗️ **Pharmacy Methods & Formulation**
+You can ask things like:
+- "What’s the method for preparing calamine lotion?"
+- "Explain the levigation process in compounding."
+- "How is an emulsion different from a suspension?"
+- "Tell me the general steps in making a syrup."
+- "What’s the role of preservatives in eye drops?"
+
+I’ll explain the purpose of each step and ingredient.
+
+-----------------------
+💉 **Prescription Interpretation**
+Try asking:
+- "What does this prescription mean: T. Amox 500mg tds x 5/7?"
+- "Interpret: Inj. Gentamicin 80mg IM stat, then bd x 5 days."
+- "What’s the duration and frequency of this prescription?"
+- "Explain abbreviations like bd, tds, stat, prn, od."
+
+I’ll interpret and explain the meaning clearly.
+
+-----------------------
+🏷️ **Labeling Guidance**
+Ask for help like:
+- "What label should I use for eye drops?"
+- "Show auxiliary labels for antibiotics."
+- "How should I label a syrup given tds?"
+- "What’s the correct label for external-use creams?"
+
+I’ll give standard labeling text and cautions based on guidelines.
+
+-----------------------
+🧪 **Ingredients & Use**
+You can ask:
+- "What’s the function of methylparaben?"
+- "Why is glycerin used in cough syrups?"
+- "List the ingredients and their uses in calamine lotion."
+- "What’s the role of lactose in tablets?"
+
+I’ll explain their category (e.g., preservative, binder, humectant) and their importance.
+
+-----------------------
+📚 **Drug Information**
+Ask me to find:
+- "Show me the drug info for ibuprofen."
+- "What’s the ATC classification of omeprazole?"
+- "What are the contraindications of metformin?"
+- "Get the PubChem data for paracetamol."
+
+I’ll pull info from trusted sources like OpenFDA, RxNorm, DailyMed, PubChem, and WHO.
+
+-----------------------
+🧠 **Clinical & Research Insight**
+Ask:
+- "Find clinical trials on insulin therapy."
+- "What’s the mechanism of action of metoprolol?"
+- "Any study about herbal cough remedies?"
+- "What are the common adverse effects of ACE inhibitors?"
+
+-----------------------
+🧾 **Regulatory & Product Lookup**
+Try:
+- "Get NAFDAC info for Augmentin 625mg."
+- "Check if amlodipine is registered in Nigeria."
+- "Show FDA warning updates on ranitidine."
+
+-----------------------
+💬 **Bonus Tips**
+You can start questions with:
+- "Explain…"
+- "Calculate…"
+- "Find…"
+- "Interpret…"
+- "Show…"
+- "What’s the formula for…"
+- "How to prepare…"
+
+-----------------------
+🩺 **Example Full Prompts**
+- "Calculate IV infusion rate for 1g ceftriaxone diluted in 100mL over 1 hour."
+- "Explain the compounding steps for a cream."
+- "What’s the role of alcohol in hand sanitizers?"
+- "Interpret this: Tab Amoxicillin 500mg tds x 7 days."
+- "List ingredients and uses in oral rehydration salt."
+
+-----------------------
+💡 **Note**
+I provide educational and reference guidance only — not a replacement for professional medical advice.
+
+Type `/help` anytime to see this guide again.
+
+-----------------------
+⚙️ Owner notes: set env vars `HF_API_KEY`, `HF_MODEL`, `WEATHER_API_KEY` etc., then restart the bot.
+"""
 
 # ---------------- CONFIG & KEYS ----------------
 HF_KEY = os.getenv("HF_API_KEY") or os.getenv("HUGGINGFACE_API_KEY")
