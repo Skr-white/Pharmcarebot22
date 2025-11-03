@@ -5,8 +5,22 @@ from threading import Thread
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
-from brain import chatbot_response, HELP_TEXT   # ✅ import HELP_TEXT from brain.py
-from Brain_new import chatbot_response
+import threading, requests, time
+
+# ---------------- IMPORT BRAINS ----------------
+# Original brain.py
+from brain import chatbot_response as chatbot_response_old, HELP_TEXT
+
+# New brain_new.py
+from brain_new import chatbot_response as chatbot_response_new
+
+# ---------------- EXAMPLE USAGE ----------------
+# You can choose which brain to call
+def get_bot_reply(user_input, use_new_brain=True):
+    if use_new_brain:
+        return chatbot_response_new(user_input)
+    else:
+        return chatbot_response_old(user_input)
 # Typing indicator helper
 import threading, requests, time
 
