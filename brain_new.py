@@ -41,7 +41,7 @@ try:
 except Exception:
     # brain.py not present or not loadable — fallback
     brain = None
----------------- CHATBOT FUNCTION ----------------
+#-------------- CHATBOT FUNCTION ----------------
 def chatbot_response(message: str) -> str:
     response = f"Echo from brain_new: {message}"  # Example logic
     update_state("last_user_message", message)
@@ -98,7 +98,7 @@ def cached(ttl=CACHE_TTL):
             return val
         return wrapper
     return deco
----------------- TTL CACHE EXAMPLE ----------------
+# -------------- TTL CACHE EXAMPLE ----------------
 class TTLCache:
     def __init__(self, ttl: int = 60):
         self.ttl = ttl
