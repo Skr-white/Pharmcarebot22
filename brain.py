@@ -25,19 +25,25 @@ import requests
 from functools import wraps
 from datetime import datetime, timedelta
 from urllib.parse import quote_plus
-from typing import Any, Dict, Optional  # ✅ Needed for TTLCache
-from shared_state import update_state, get_state
-from shared_state import shared_data, lock
 
+# Typing
+from typing import Any, Dict, Optional, Callable
 
-# Example chatbot function
+# Shared state
+from shared_state import shared_data, lock, update_state, get_state
+
+# ---------------- Example chatbot function ----------------
 def chatbot_response(message: str) -> str:
-    # Example response logic
-    response = f"I got your message: {message}"
+    """
+    Example chatbot response logic.
+    Updates shared state with last user message and last bot response.
+    """
+    response = f"I got your message: {message}"  # Replace with your actual logic
     
-    # Update shared state
-    update_state("last_user_message", message)
-    update_state("last_bot_response", response)
+    # Update shared state safely
+    with lock:
+        update_state("last_user_message", message)
+        update_state("last_bot_response", response)
     
     return response
 HELP_TEXT = """
