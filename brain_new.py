@@ -98,7 +98,7 @@ def cached(ttl=CACHE_TTL):
             return val
         return wrapper
     return deco
-# ---------------- TTL CACHE EXAMPLE ----------------
+
 class TTLCache:
     def __init__(self, ttl: int = 60):
         self.ttl = ttl
