@@ -1,26 +1,44 @@
 import os
 import asyncio
-import logging
-from threading import Thread
-from flask import Flask, request
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
-import threading, requests, time
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# ---------------- IMPORT BRAINS ----------------
-# Original brain.py
-from brain import chatbot_response as chatbot_response_old, HELP_TEXT
+from brain import chatbot_response, HELP_TEXT
+from brain_new import chatbot_response_new
+from shared_state import get_state
 
-# New brain_new.py
-from brain_new import chatbot_response as chatbot_response_new
+# Example async command
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Hello! I’m PharmaCare Bot.", parse_mode=ParseMode.MARKDOWN)
 
-# ---------------- EXAMPLE USAGE ----------------
-# You can choose which brain to call
-def get_bot_reply(user_input, use_new_brain=True):
-    if use_new_brain:
-        return chatbot_response_new(user_input)
-    else:
-        return chatbot_response_old(user_input)
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(HELP_TEXT, parse_mode=ParseMode.MARKDOWN)
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_msg = update.message.text
+    
+    # Get response from main brain
+    response = chatbot_response(user_msg)
+    
+    # Optionally also send new brain response
+    response_new = chatbot_response_new(user_msg)
+    
+    # Send combined response
+    combined = f"{response}\n{response_new}"
+    await update.message.reply_text(combined, parse_mode=ParseMode.MARKDOWN)
+
+def main():
+    token = os.getenv("TELEGRAM_TOKEN")
+    app = Application.builder().token(token).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
 # Typing indicator helper
 import threading, requests, time
 
