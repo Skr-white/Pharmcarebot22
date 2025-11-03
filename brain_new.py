@@ -23,28 +23,36 @@ import json
 import random
 import requests
 from datetime import datetime
+from threading import Lock
+
+# Telegram imports
 from telegram import Update, Bot
-from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import CallbackContext
-from shared_state import shared_data, lock
-from shared_state import shared_data, lock
 
-# Example usage
-def chatbot_response(message: str) -> str:
-    response = f"Echo: {message}"  # replace with actual logic
-    update_state("last_user_message", message)
-    update_state("last_bot_response", response)
-    return response
+# Typing
+from typing import Dict, Any, Callable, Optional
+
+# Shared state
+from shared_state import shared_data, lock, update_state, get_state
+
 # ---------------- IMPORT/INHERIT CONFIG FROM brain.py ----------------
 brain = None
 try:
     import brain as base_brain
     brain = base_brain
 except Exception:
-    # brain.py not present or not loadable — we'll fall back to environment variables below
+    # brain.py not present or not loadable — fallback
     brain = None
 
+# Example chatbot response function
+def chatbot_response(message: str) -> str:
+    response = f"Echo: {message}"  # replace with your actual logic
+    # Save last message & response to shared state
+    with lock:
+        update_state("last_user_message", message)
+        update_state("last_bot_response", response)
+    return response
 # Inherit configuration and keys from brain.py if available, else from env
 HF_KEY = getattr(brain, "HF_KEY", None) or os.getenv("HF_API_KEY") or os.getenv("HUGGINGFACE_API_KEY")
 HF_MODEL = getattr(brain, "HF_MODEL", None) or os.getenv("HF_MODEL", "google/flan-t5-small")
