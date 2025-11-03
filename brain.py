@@ -729,7 +729,15 @@ def tool_map(place: str) -> Optional[str]:
         except Exception:
             pass
     return None
+# Example in brain.py
+def chatbot_response(message: str) -> str:
+    response = f"Echo: {message}"  # your actual response logic
 
+    with lock:
+        shared_data["last_user_message"] = message
+        shared_data["last_bot_response"] = response
+
+    return response
 # ---------------- Tool registry (single name keys) ----------------
 TOOL_REGISTRY: Dict[str, Callable[[str], Optional[str]]] = {
     # weather family (note keys are simple)
