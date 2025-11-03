@@ -19,22 +19,19 @@ Features:
 """
 
 import os
+import re
 import json
+import math
+import time
+import html
 import random
 import requests
-from datetime import datetime
-from threading import Lock
+from functools import wraps
+from datetime import datetime, timedelta
+from urllib.parse import quote_plus
+from typing import Any, Dict, Optional, List, Callable
 
-# Telegram imports
-from telegram import Update, Bot
-from telegram.constants import ParseMode
-from telegram.ext import CallbackContext
-
-# Typing
-from typing import Dict, Any, Callable, Optional
-
-# Shared state
-from shared_state import shared_data, lock, update_state, get_state
+from shared_state import update_state, get_state, shared_data, lock
 
 # ---------------- IMPORT/INHERIT CONFIG FROM brain.py ----------------
 brain = None
@@ -44,14 +41,11 @@ try:
 except Exception:
     # brain.py not present or not loadable — fallback
     brain = None
-
-# Example chatbot response function
+---------------- CHATBOT FUNCTION ----------------
 def chatbot_response(message: str) -> str:
-    response = f"Echo: {message}"  # replace with your actual logic
-    # Save last message & response to shared state
-    with lock:
-        update_state("last_user_message", message)
-        update_state("last_bot_response", response)
+    response = f"Echo from brain_new: {message}"  # Example logic
+    update_state("last_user_message", message)
+    update_state("last_bot_response", response)
     return response
 # Inherit configuration and keys from brain.py if available, else from env
 HF_KEY = getattr(brain, "HF_KEY", None) or os.getenv("HF_API_KEY") or os.getenv("HUGGINGFACE_API_KEY")
@@ -104,6 +98,25 @@ def cached(ttl=CACHE_TTL):
             return val
         return wrapper
     return deco
+---------------- TTL CACHE EXAMPLE ----------------
+class TTLCache:
+    def __init__(self, ttl: int = 60):
+        self.ttl = ttl
+        self.d: Dict[str, Any] = {}
+
+    def set(self, k: str, val: Any):
+        self.d[k] = (time.time() + self.ttl, val)
+
+    def get(self, k: str) -> Optional[Any]:
+        item = self.d.get(k)
+        if not item:
+            return None
+        expire, val = item
+        if time.time() > expire:
+            del self.d[k]
+            return None
+        return val
+
 
 # ---------------- SAFETY FILTERS ----------------
 MANUFACTURING_PATTERNS = [
