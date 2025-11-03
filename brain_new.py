@@ -28,6 +28,17 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import CallbackContext
 from shared_state import shared_data, lock
+from shared_state import shared_data, lock
+
+# Example usage
+def chatbot_response(message: str) -> str:
+    response = f"Echo: {message}"  # your actual response logic
+
+    with lock:
+        shared_data["last_user_message"] = message
+        shared_data["last_bot_response"] = response
+
+    return response
 
 from shared_state import update_state, get_state
 
