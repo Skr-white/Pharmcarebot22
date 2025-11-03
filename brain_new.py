@@ -506,5 +506,14 @@ def format_response(resp):
     if isinstance(resp, list):
         return "\n".join([shorten(str(x), 800) for x in resp])
     return str(resp)
+# Example in brain_new.py
+def chatbot_response_new(message: str) -> str:
+    response = f"Brain_new processed: {message}"  # your logic
+
+    with lock:
+        shared_data["last_user_message"] = message
+        shared_data["last_bot_response"] = response
+
+    return response
 
 # ---------------- 
