@@ -352,7 +352,6 @@ Type `/help` anytime to see this guide again.
 -----------------------
 ⚙️ Owner notes: set env vars `HF_API_KEY`, `HF_MODEL`, `WEATHER_API_KEY` etc., then restart the bot.
 """
----------------- TTL CACHE EXAMPLE ----------------
 class TTLCache:
     def __init__(self, ttl: int = 60):
         self.ttl = ttl
