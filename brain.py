@@ -24,29 +24,37 @@ import requests
 from functools import wraps
 from datetime import datetime, timedelta
 from urllib.parse import quote_plus
-from typing import Any, Dict, Optional, List, Callable  # ✅ Added typing imports
+from typing import Any, Dict, Optional, List, Callable  # ✅ typing imports
 
 from shared_state import update_state, get_state, shared_data, lock
-from shared_state import update_state, get_state
 
-def chatbot_response(message: str) -> str:
-    response = f"Echo: {message}"
+# ---------------- TTL CACHE ----------------
+class TTLCache:
+    def __init__(self, ttl: int = 60):
+        self.ttl = ttl
+        self.d: Dict[str, Any] = {}
 
-    # Save to shared state
-    update_state("last_user_message", message)
-    update_state("last_bot_response", response)
+    def set(self, k: str, val: Any):
+        self.d[k] = (time.time() + self.ttl, val)
 
-    # Retrieve previous response
-    last_response = get_state("last_bot_response")
-    print("Last bot response:", last_response)
+    def get(self, k: str) -> Optional[Any]:
+        item = self.d.get(k)
+        if not item:
+            return None
+        expire, val = item
+        if time.time() > expire:
+            del self.d[k]
+            return None
+        return val
 
-    return response
 # ---------------- CHATBOT FUNCTION ----------------
 def chatbot_response(message: str) -> str:
     response = f"I got your message: {message}"  # Replace with your actual logic
     update_state("last_user_message", message)
     update_state("last_bot_response", response)
     return response
+
+# ---------------- HELP TEXT ----------------
 HELP_TEXT = """
 📜 *PharmaCare Bot — Commands & Examples*
 
@@ -64,7 +72,7 @@ HELP_TEXT = """
 
 I can answer pharmacy-related questions, help with calculations, explain ingredients, and guide you through pharmaceutical methods.
 
------------------------
+# -----------------------
 🧮 **Dosage & Calculation Help**
 You can ask questions like:
 - "How do I calculate a child’s dose for paracetamol 15mg/kg if the child weighs 20kg?"
@@ -75,7 +83,7 @@ You can ask questions like:
 
 I’ll show the step-by-step formula and the correct method.
 
------------------------
+# -----------------------
 ⚗️ **Pharmacy Methods & Formulation**
 You can ask things like:
 - "What’s the method for preparing calamine lotion?"
@@ -86,7 +94,7 @@ You can ask things like:
 
 I’ll explain the purpose of each step and ingredient.
 
------------------------
+# -----------------------
 💉 **Prescription Interpretation**
 Try asking:
 - "What does this prescription mean: T. Amox 500mg tds x 5/7?"
@@ -96,7 +104,7 @@ Try asking:
 
 I’ll interpret and explain the meaning clearly.
 
------------------------
+# -----------------------
 🏷️ **Labeling Guidance**
 Ask for help like:
 - "What label should I use for eye drops?"
@@ -106,7 +114,7 @@ Ask for help like:
 
 I’ll give standard labeling text and cautions based on guidelines.
 
------------------------
+# -----------------------
 🧪 **Ingredients & Use**
 You can ask:
 - "What’s the function of methylparaben?"
@@ -116,7 +124,7 @@ You can ask:
 
 I’ll explain their category (e.g., preservative, binder, humectant) and their importance.
 
------------------------
+# -----------------------
 📚 **Drug Information**
 Ask me to find:
 - "Show me the drug info for ibuprofen."
@@ -126,7 +134,7 @@ Ask me to find:
 
 I’ll pull info from trusted sources like OpenFDA, RxNorm, DailyMed, PubChem, and WHO.
 
------------------------
+# -----------------------
 🧠 **Clinical & Research Insight**
 Ask:
 - "Find clinical trials on insulin therapy."
@@ -134,14 +142,14 @@ Ask:
 - "Any study about herbal cough remedies?"
 - "What are the common adverse effects of ACE inhibitors?"
 
------------------------
+# -----------------------
 🧾 **Regulatory & Product Lookup**
 Try:
 - "Get NAFDAC info for Augmentin 625mg."
 - "Check if amlodipine is registered in Nigeria."
 - "Show FDA warning updates on ranitidine."
 
------------------------
+# -----------------------
 💬 **Bonus Tips**
 You can start questions with:
 - "Explain…"
@@ -152,7 +160,7 @@ You can start questions with:
 - "What’s the formula for…"
 - "How to prepare…"
 
------------------------
+# -----------------------
 🩺 **Example Full Prompts**
 - "Calculate IV infusion rate for 1g ceftriaxone diluted in 100mL over 1 hour."
 - "Explain the compounding steps for a cream."
@@ -160,16 +168,17 @@ You can start questions with:
 - "Interpret this: Tab Amoxicillin 500mg tds x 7 days."
 - "List ingredients and uses in oral rehydration salt."
 
------------------------
+# -----------------------
 💡 **Note**
 I provide educational and reference guidance only — not a replacement for professional medical advice.
 
 Type `/help` anytime to see this guide again.
 
------------------------
+# -----------------------
 ⚙️ Owner notes: set env vars `HF_API_KEY`, `HF_MODEL`, `WEATHER_API_KEY` etc., then restart the bot.
 """
-# ---------------- TOOL REGISTRY EXAMPLE ----------------
+
+# ---------------- TOOL REGISTRY ----------------
 TOOL_REGISTRY: Dict[str, Callable[[str], Optional[str]]] = {}
 
 def try_tools_sequence(key: str, arg: str, candidates: List[Callable[[str], Optional[str]]]) -> Optional[str]:
