@@ -2,24 +2,15 @@ import os
 import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.constants import ParseMode
 
 from brain import chatbot_response, HELP_TEXT
 from brain_new import chatbot_response_new
-from shared_state import get_state
-from shared_state import shared_data, lock
-from shared_state import get_state
-from shared_state import get_state
+from shared_state import get_state, shared_data, lock
 
-# Instead of this (causes KeyError if not set):
-# last_response = shared_data["last_bot_response"]
-
-# Use get_state with a default
+# Safe way to read last bot response
 last_response = get_state("last_bot_response", default="No previous response yet")
 print("Last bot response:", last_response)
-
-# Example: read last bot response
-with lock:
-    last_response = shared_data["last_bot_response"]
 
 # Example async command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -51,8 +42,6 @@ def main():
 
     app.run_polling()
 
-if __name__ == "__main__":
-    main()
 # Typing indicator helper
 import threading, requests, time
 
@@ -69,6 +58,7 @@ def start_typing(token, chat_id, stop_event):
 # Chat handler using Brain
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
+    TOKEN = os.getenv("TELEGRAM_TOKEN")
 
     # start typing indicator
     stop_evt = threading.Event()
