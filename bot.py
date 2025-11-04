@@ -5,6 +5,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ParseMode
 from flask import Flask, request
+from threading import Thread, Event, Lock
 
 from brain import chatbot_response, HELP_TEXT
 from brain_new import chatbot_response_new
