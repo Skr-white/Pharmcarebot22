@@ -8,6 +8,7 @@ from brain_new import chatbot_response_new
 from shared_state import get_state
 from shared_state import shared_data, lock
 from shared_state import get_state
+from shared_state import get_state
 
 # Instead of this (causes KeyError if not set):
 # last_response = shared_data["last_bot_response"]
