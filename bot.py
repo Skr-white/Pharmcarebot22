@@ -7,6 +7,14 @@ from brain import chatbot_response, HELP_TEXT
 from brain_new import chatbot_response_new
 from shared_state import get_state
 from shared_state import shared_data, lock
+from shared_state import get_state
+
+# Instead of this (causes KeyError if not set):
+# last_response = shared_data["last_bot_response"]
+
+# Use get_state with a default
+last_response = get_state("last_bot_response", default="No previous response yet")
+print("Last bot response:", last_response)
 
 # Example: read last bot response
 with lock:
